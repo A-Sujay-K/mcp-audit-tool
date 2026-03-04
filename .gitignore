@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables
+.env
+.env.local
+
+# pytest
+.pytest_cache/
+coverage.xml
+*.cover
+*.log
+
+# Database
+*.sqlite
+*.db
+
+# Node / React Dashboard
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.npm/
+dashboard/.eslintcache
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# MCP Audit specific
+.mcp-audit/
+*.sarif
