@@ -239,3 +239,97 @@ class ExploitResult(BaseModel):
         description="Whether mock sensitive data appeared in the exfiltration channel.",
     )
     injection_payload_used: str | None = None
+    failure_reason: str | None = None
+    recommendations: list[str] = Field(default_factory=list)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
+    duration_seconds: float | None = None
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Drift / Rug-Pull Detection
+# ════════════════════════════════════════════════════════════════════════
+
+class DriftType(str, Enum):
+    """Types of tool definition changes between scans."""
+
+    TOOL_ADDED = "tool_added"
+    TOOL_REMOVED = "tool_removed"
+    DESCRIPTION_CHANGED = "description_changed"
+    SCHEMA_CHANGED = "schema_changed"
+    CAPABILITY_ESCALATION = "capability_escalation"
+    CAPABILITY_DEESCALATION = "capability_deescalation"
+
+
+class DriftEvent(BaseModel):
+    """A detected change in a tool's definition between two scans."""
+
+    id: UUID = Field(default_factory=uuid4)
+    server_name: str
+    tool_name: str
+    drift_type: DriftType
+    description: str = ""
+    old_hash: str | None = None
+    new_hash: str | None = None
+    old_capabilities: list[ToolCapability] | None = None
+    new_capabilities: list[ToolCapability] | None = None
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    severity: Literal["low", "medium", "high", "critical"] = "medium"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Scan Session
+# ════════════════════════════════════════════════════════════════════════
+
+class ScanStatus(str, Enum):
+    """Status of a scan session."""
+
+    PENDING = "pending"
+    DISCOVERING = "discovering"
+    CLASSIFYING = "classifying"
+    ANALYZING = "analyzing"
+    EXPLOITING = "exploiting"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ScanResult(BaseModel):
+    """Top-level result of a complete audit scan."""
+
+    id: UUID = Field(default_factory=uuid4)
+    status: ScanStatus = ScanStatus.PENDING
+    config_source: str = ""
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
+
+    # Discovery
+    servers_discovered: list[ServerConfig] = Field(default_factory=list)
+    tools_discovered: list[DiscoveredTool] = Field(default_factory=list)
+    tools_classified: list[ClassifiedTool] = Field(default_factory=list)
+
+    # Analysis
+    findings: list[TrifectaFinding] = Field(default_factory=list)
+    overall_risk_score: float = Field(default=0.0, ge=0.0, le=10.0)
+
+    # Exploitation
+    exploit_results: list[ExploitResult] = Field(default_factory=list)
+
+    # Drift
+    drift_events: list[DriftEvent] = Field(default_factory=list)
+
+    # Summary counts
+    @property
+    def total_servers(self) -> int:
+        return len(self.servers_discovered)
+
+    @property
+    def total_tools(self) -> int:
+        return len(self.tools_classified)
+
+    @property
+    def total_findings(self) -> int:
+        return len(self.findings)
+
+    @property
+    def confirmed_exploits(self) -> int:
+        return sum(1 for e in self.exploit_results if e.verdict == ExploitVerdict.CONFIRMED)
