@@ -81,3 +81,87 @@ class ClientConfig(BaseModel):
     """Parsed MCP client configuration containing multiple servers."""
 
     client_type: str = Field(
+        ..., description="Client type: claude_desktop, cursor, windsurf, generic, etc."
+    )
+    config_path: str = Field(..., description="Absolute path to the config file.")
+    servers: list[ServerConfig] = Field(default_factory=list)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Tool Discovery & Classification
+# ════════════════════════════════════════════════════════════════════════
+
+class DiscoveredTool(BaseModel):
+    """Raw tool definition as returned by an MCP server's tools/list response."""
+
+    server_name: str
+    tool_name: str
+    description: str = ""
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    annotations: dict[str, Any] | None = Field(
+        default=None,
+        description="MCP tool annotations (readOnlyHint, destructiveHint, etc.).",
+    )
+
+
+class ClassificationResult(BaseModel):
+    """LLM classification output for a single tool."""
+
+    capabilities: list[ToolCapability]
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str = ""
+
+
+class ClassifiedTool(BaseModel):
+    """A discovered tool enriched with its LLM-assigned capability classification."""
+
+    id: UUID = Field(default_factory=uuid4)
+    server_name: str
+    tool_name: str
+    description: str = ""
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    capabilities: list[ToolCapability] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    reasoning: str = ""
+    description_hash: str = Field(
+        default="",
+        description="SHA-256 hash for drift / rug-pull detection.",
+    )
+    annotations: dict[str, Any] | None = None
+    classified_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    def compute_hash(self) -> str:
+        """Compute a deterministic SHA-256 hash of this tool's security-relevant fields."""
+        canonical = json.dumps(
+            {
+                "name": self.tool_name,
+                "description": self.description,
+                "input_schema": self.input_schema,
+                "annotations": self.annotations,
+            },
+            sort_keys=True,
+            ensure_ascii=True,
+        )
+        self.description_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        return self.description_hash
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Cross-Server Graph & Trifecta Analysis
+# ════════════════════════════════════════════════════════════════════════
+
+class TrifectaType(str, Enum):
+    """Types of dangerous cross-server capability combinations."""
+
+    LETHAL_TRIFECTA = "lethal_trifecta"
+    """Read private data + ingest untrusted content + send data out."""
+
+    CODE_EXECUTION_CHAIN = "code_execution_chain"
+    """Ingest untrusted content → execute code (RCE via prompt injection)."""
+
+    CREDENTIAL_THEFT = "credential_theft"
+    """Manage credentials → send data out."""
+
+    FILESYSTEM_MANIPULATION = "filesystem_manipulation"
+    """Ingest untrusted content → modify filesystem (persistent backdoor)."""
+
