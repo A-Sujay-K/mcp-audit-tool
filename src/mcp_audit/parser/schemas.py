@@ -132,3 +132,110 @@ class ClassifiedTool(BaseModel):
 
     def compute_hash(self) -> str:
         """Compute a deterministic SHA-256 hash of this tool's security-relevant fields."""
+        canonical = json.dumps(
+            {
+                "name": self.tool_name,
+                "description": self.description,
+                "input_schema": self.input_schema,
+                "annotations": self.annotations,
+            },
+            sort_keys=True,
+            ensure_ascii=True,
+        )
+        self.description_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        return self.description_hash
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Cross-Server Graph & Trifecta Analysis
+# ════════════════════════════════════════════════════════════════════════
+
+class TrifectaType(str, Enum):
+    """Types of dangerous cross-server capability combinations."""
+
+    LETHAL_TRIFECTA = "lethal_trifecta"
+    """Read private data + ingest untrusted content + send data out."""
+
+    CODE_EXECUTION_CHAIN = "code_execution_chain"
+    """Ingest untrusted content → execute code (RCE via prompt injection)."""
+
+    CREDENTIAL_THEFT = "credential_theft"
+    """Manage credentials → send data out."""
+
+    FILESYSTEM_MANIPULATION = "filesystem_manipulation"
+    """Ingest untrusted content → modify filesystem (persistent backdoor)."""
+
+
+class TrifectaFinding(BaseModel):
+    """A single dangerous capability combination found across MCP servers."""
+
+    id: UUID = Field(default_factory=uuid4)
+    finding_type: TrifectaType
+    risk_score: float = Field(default=0.0, ge=0.0, le=10.0)
+
+    # The tools forming this chain
+    injection_tool: ClassifiedTool | None = Field(
+        default=None, description="Tool providing the untrusted content ingestion surface."
+    )
+    data_tool: ClassifiedTool | None = Field(
+        default=None, description="Tool that reads sensitive / private data."
+    )
+    exfil_tool: ClassifiedTool | None = Field(
+        default=None, description="Tool that can send data outbound."
+    )
+    code_exec_tool: ClassifiedTool | None = Field(
+        default=None, description="Tool that can execute code (for RCE chains)."
+    )
+    credential_tool: ClassifiedTool | None = Field(
+        default=None, description="Tool that manages credentials."
+    )
+    filesystem_tool: ClassifiedTool | None = Field(
+        default=None, description="Tool that modifies the filesystem."
+    )
+
+    description: str = ""
+    recommendation: str = ""
+    servers_involved: list[str] = Field(default_factory=list)
+    is_cross_server: bool = Field(
+        default=False,
+        description="True if the chain spans multiple MCP servers.",
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Exploit Sandbox Results
+# ════════════════════════════════════════════════════════════════════════
+
+class ExploitVerdict(str, Enum):
+    """Outcome of a sandboxed exploit attempt."""
+
+    CONFIRMED = "CONFIRMED"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+    ERROR = "ERROR"
+
+
+class ExploitStep(BaseModel):
+    """A single step in the exploit attempt timeline."""
+
+    step_number: int
+    action: str = Field(..., description="What the agent attempted.")
+    detail: str = ""
+    tool_used: str | None = None
+    succeeded: bool = False
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ExploitResult(BaseModel):
+    """Full result of a sandboxed exploit confirmation attempt."""
+
+    id: UUID = Field(default_factory=uuid4)
+    finding_id: UUID
+    verdict: ExploitVerdict
+    steps: list[ExploitStep] = Field(default_factory=list)
+    sensitive_data_exfiltrated: bool = Field(
+        default=False,
+        description="Whether mock sensitive data appeared in the exfiltration channel.",
+    )
+    injection_payload_used: str | None = None
