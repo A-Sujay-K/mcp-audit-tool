@@ -12,7 +12,7 @@ class ConfigParser:
     """Parses MCP client configuration files from various sources."""
 
     def __init__(self):
-        self.auth_patterns = {"token", "key", "secret", "password", "auth", "credential"}
+        self.auth_patterns = {"token","key","secret","password","auth","credential","api_key"}
 
     def _detect_client_type(self, path: Path) -> str:
         """Infer the client type from the path."""
