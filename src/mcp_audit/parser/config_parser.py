@@ -88,3 +88,40 @@ class ConfigParser:
             env = config.get("env", {})
             has_auth = self._has_auth(env)
 
+            if "command" in config:
+                servers.append(
+                    ServerConfig(
+                        name=name,
+                        transport=TransportType.STDIO,
+                        command=config.get("command"),
+                        args=config.get("args", []),
+                        env=env,
+                        config_source=str(path),
+                        has_auth=has_auth,
+                    )
+                )
+            else:
+                logger.warning(f"Unknown transport for Zed server {name} in {path}")
+
+        return ClientConfig(client_type="zed", config_path=str(path), servers=servers)
+
+    def parse_file(self, path: str | Path) -> ClientConfig:
+        """Parse a single config file and auto-detect its format."""
+        path = Path(path).resolve()
+        client_type = self._detect_client_type(path)
+
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if "context_servers" in data:
+                return self._parse_zed_config(data, path)
+            else:
+                return self._parse_standard_config(data, client_type, path)
+        except FileNotFoundError:
+            logger.error(f"Config file not found: {path}")
+            return ClientConfig(client_type=client_type, config_path=str(path), servers=[])
+        except json.JSONDecodeError:
+            logger.error(f"Malformed JSON in config file: {path}")
+            return ClientConfig(client_type=client_type, config_path=str(path), servers=[])
+        except Exception as e:
