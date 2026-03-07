@@ -60,3 +60,52 @@ class ConfigParser:
                     )
                 )
             elif "url" in config or "serverUrl" in config:
+                transport = TransportType.STREAMABLE_HTTP  # Or SSE depending on details
+                if "type" in config and config["type"] == "sse":
+                    transport = TransportType.SSE
+                url = config.get("url") or config.get("serverUrl")
+                servers.append(
+                    ServerConfig(
+                        name=name,
+                        transport=transport,
+                        url=url,
+                        env=env,
+                        config_source=str(path),
+                        has_auth=has_auth,
+                    )
+                )
+            else:
+                logger.warning(f"Unknown transport for server {name} in {path}")
+
+        return ClientConfig(client_type=client_type, config_path=str(path), servers=servers)
+
+    def _parse_zed_config(self, data: dict[str, Any], path: Path) -> ClientConfig:
+        """Parse Zed context servers config format."""
+        servers = []
+        context_servers = data.get("context_servers", {})
+
+        for name, config in context_servers.items():
+            env = config.get("env", {})
+            has_auth = self._has_auth(env)
+
+            if "command" in config:
+                servers.append(
+                    ServerConfig(
+                        name=name,
+                        transport=TransportType.STDIO,
+                        command=config.get("command"),
+                        args=config.get("args", []),
+                        env=env,
+                        config_source=str(path),
+                        has_auth=has_auth,
+                    )
+                )
+            else:
+                logger.warning(f"Unknown transport for Zed server {name} in {path}")
+
+        return ClientConfig(client_type="zed", config_path=str(path), servers=servers)
+
+    def parse_file(self, path: str | Path) -> ClientConfig:
+        """Parse a single config file and auto-detect its format."""
+        path = Path(path).resolve()
+        client_type = self._detect_client_type(path)
