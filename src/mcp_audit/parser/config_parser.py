@@ -109,3 +109,56 @@ class ConfigParser:
         """Parse a single config file and auto-detect its format."""
         path = Path(path).resolve()
         client_type = self._detect_client_type(path)
+
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if "context_servers" in data:
+                return self._parse_zed_config(data, path)
+            else:
+                return self._parse_standard_config(data, client_type, path)
+        except FileNotFoundError:
+            logger.error(f"Config file not found: {path}")
+            return ClientConfig(client_type=client_type, config_path=str(path), servers=[])
+        except json.JSONDecodeError:
+            logger.error(f"Malformed JSON in config file: {path}")
+            return ClientConfig(client_type=client_type, config_path=str(path), servers=[])
+        except Exception as e:
+            logger.error(f"Error parsing config file {path}: {e}")
+            return ClientConfig(client_type=client_type, config_path=str(path), servers=[])
+
+    def auto_detect(self) -> list[ClientConfig]:
+        """Scan known OS locations for MCP configs."""
+        configs = []
+        home = Path.home()
+        cwd = Path.cwd()
+
+        # Define known paths
+        appdata = os.environ.get("APPDATA")
+        paths_to_check = []
+
+        # Claude Desktop
+        if appdata:
+            paths_to_check.append(Path(appdata) / "Claude" / "claude_desktop_config.json")
+        paths_to_check.append(home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json")
+
+        # Cursor
+        paths_to_check.append(cwd / ".cursor" / "mcp.json")
+        paths_to_check.append(home / ".cursor" / "mcp.json")
+
+        # Windsurf
+        userprofile = os.environ.get("USERPROFILE")
+        if userprofile:
+            paths_to_check.append(Path(userprofile) / ".codeium" / "windsurf" / "mcp_config.json")
+        paths_to_check.append(home / ".codeium" / "windsurf" / "mcp_config.json")
+
+        # Claude Code
+        paths_to_check.append(cwd / ".mcp.json")
+
+        for path in paths_to_check:
+            if path.exists() and path.is_file():
+                logger.info(f"Detected config file at {path}")
+                configs.append(self.parse_file(path))
+
+        return configs
