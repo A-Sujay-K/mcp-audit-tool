@@ -1,0 +1,62 @@
+import asyncio
+import json
+import logging
+
+try:
+    import litellm
+except ImportError:
+    litellm = None
+
+from mcp_audit.config import Settings
+from mcp_audit.parser.schemas import (
+    ClassificationResult,
+    ClassifiedTool,
+    DiscoveredTool,
+    ToolCapability,
+)
+
+logger = logging.getLogger(__name__)
+
+class CapabilityClassifier:
+    """Classifies tool capabilities using an LLM."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.model = settings.llm_model
+        # Optional litellm setup based on settings
+        if settings.llm_api_key and litellm is not None:
+            import os
+            # Simple heuristic, ideally uses litellm provider setup
+            os.environ[f"{settings.llm_provider.value.upper()}_API_KEY"] = settings.llm_api_key
+        if settings.llm_base_url and litellm is not None:
+            litellm.api_base = settings.llm_base_url
+
+    def _build_prompt(self, tool: DiscoveredTool) -> str:
+        return f"""
+        Analyze the following MCP tool and determine its capabilities.
+        
+        Tool Name: {tool.tool_name}
+        Server Name: {tool.server_name}
+        Description: {tool.description}
+        Input Schema: {json.dumps(tool.input_schema)}
+        
+        Classify this tool into one or more of the following capability categories:
+        - {ToolCapability.READS_SENSITIVE_DATA.value}
+        - {ToolCapability.INGESTS_UNTRUSTED.value}
+        - {ToolCapability.SENDS_DATA_OUT.value}
+        - {ToolCapability.EXECUTES_CODE.value}
+        - {ToolCapability.MODIFIES_FILESYSTEM.value}
+        - {ToolCapability.MANAGES_CREDENTIALS.value}
+        
+        Return a JSON object with:
+        - "capabilities": list of capability strings.
+        - "confidence": float between 0.0 and 1.0.
+        - "reasoning": brief explanation of why these capabilities were chosen.
+        """
+
+    async def classify_tool(self, tool: DiscoveredTool) -> ClassifiedTool:
+        """Classify a single tool via LLM with JSON mode."""
+        prompt = self._build_prompt(tool)
+
+        if litellm is None:
+            logger.warning(f"litellm not installed, falling back to rule-based for {tool.tool_name}")
