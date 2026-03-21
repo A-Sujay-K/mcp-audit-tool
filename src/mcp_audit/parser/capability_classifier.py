@@ -60,3 +60,59 @@ class CapabilityClassifier:
 
         if litellm is None:
             logger.warning(f"litellm not installed, falling back to rule-based for {tool.tool_name}")
+            fallback = RuleBasedFallbackClassifier()
+            classification = fallback.classify(tool)
+        else:
+            try:
+                response = await litellm.acompletion(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are a cybersecurity expert analyzing MCP tools. Return valid JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=self.settings.llm_temperature
+                )
+
+                content = response.choices[0].message.content
+                parsed = json.loads(content)
+
+                classification = ClassificationResult(
+                    capabilities=[ToolCapability(c) for c in parsed.get("capabilities", [])],
+                    confidence=parsed.get("confidence", 0.0),
+                    reasoning=parsed.get("reasoning", "")
+                )
+
+            except Exception as e:
+                logger.error(f"LLM classification failed for {tool.tool_name}: {e}. Falling back to Rule-Based.")
+                fallback = RuleBasedFallbackClassifier()
+                classification = fallback.classify(tool)
+
+        classified = ClassifiedTool(
+            server_name=tool.server_name,
+            tool_name=tool.tool_name,
+            description=tool.description,
+            input_schema=tool.input_schema,
+            annotations=tool.annotations,
+            capabilities=classification.capabilities,
+            confidence=classification.confidence,
+            reasoning=classification.reasoning
+        )
+        classified.compute_hash()
+        return classified
+
+    async def classify_batch(self, tools: list[DiscoveredTool]) -> list[ClassifiedTool]:
+        """Classify a batch of tools concurrently with caching."""
+        # Note: robust caching implementation should save to settings.classification_cache_dir
+        # This implementation uses simple gather for concurrency
+        tasks = [self.classify_tool(tool) for tool in tools]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        classified_tools = []
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                logger.error(f"Error classifying batch item {tools[i].tool_name}: {res}")
+                # Fallback on failure
+                fallback = RuleBasedFallbackClassifier()
+                class_res = fallback.classify(tools[i])
+                ct = ClassifiedTool(
