@@ -116,3 +116,49 @@ class CapabilityClassifier:
                 fallback = RuleBasedFallbackClassifier()
                 class_res = fallback.classify(tools[i])
                 ct = ClassifiedTool(
+                    server_name=tools[i].server_name,
+                    tool_name=tools[i].tool_name,
+                    description=tools[i].description,
+                    input_schema=tools[i].input_schema,
+                    capabilities=class_res.capabilities,
+                    confidence=class_res.confidence,
+                    reasoning=class_res.reasoning
+                )
+                ct.compute_hash()
+                classified_tools.append(ct)
+            else:
+                classified_tools.append(res)
+
+        return classified_tools
+
+
+class RuleBasedFallbackClassifier:
+    """Uses keyword matching to classify tools when LLM is unavailable."""
+
+    def __init__(self):
+        self.rules = {
+            ToolCapability.READS_SENSITIVE_DATA: ["read", "file", "database", "query", "get", "fetch", "secret", "credential", "list_files", "search"],
+            ToolCapability.INGESTS_UNTRUSTED: ["url", "http", "fetch", "browse", "email", "upload", "download", "web", "scrape", "crawl"],
+            ToolCapability.SENDS_DATA_OUT: ["send", "post", "webhook", "notify", "email", "push", "transmit", "slack", "message", "chat"],
+            ToolCapability.EXECUTES_CODE: ["exec", "run", "shell", "command", "eval", "script", "code", "terminal", "bash", "python"],
+            ToolCapability.MODIFIES_FILESYSTEM: ["write", "create", "delete", "remove", "save", "update_file", "mkdir"],
+            ToolCapability.MANAGES_CREDENTIALS: ["key", "token", "password", "secret", "credential", "auth", "login", "api_key"]
+        }
+
+    def classify(self, tool: DiscoveredTool) -> ClassificationResult:
+        capabilities = set()
+        text_to_search = f"{tool.tool_name} {tool.description} {json.dumps(tool.input_schema)}".lower()
+
+        for capability, keywords in self.rules.items():
+            if any(kw in text_to_search for kw in keywords):
+                capabilities.add(capability)
+
+        reasoning = "Classified using fallback rule-based keyword matching."
+        if not capabilities:
+            reasoning = "No capabilities detected via rule-based matching."
+
+        return ClassificationResult(
+            capabilities=list(capabilities),
+            confidence=0.5,
+            reasoning=reasoning
+        )
