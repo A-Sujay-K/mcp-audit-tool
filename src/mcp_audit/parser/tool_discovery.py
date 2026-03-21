@@ -97,3 +97,57 @@ class ToolDiscoverer:
         """Connect to MCP server and call tools/list."""
         logger.info(f"Discovering tools for {server.name} via {server.transport.value}")
         if server.transport == TransportType.STDIO:
+            return await self._discover_stdio(server)
+        elif server.transport in (TransportType.STREAMABLE_HTTP, TransportType.SSE):
+            return await self._discover_http(server)
+        else:
+            logger.warning(f"Unsupported transport type: {server.transport}")
+            return []
+
+    async def discover_all(self, servers: list[ServerConfig]) -> list[DiscoveredTool]:
+        """Discover tools across all servers concurrently."""
+        tasks = [self.discover_tools(server) for server in servers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_tools = []
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                logger.error(f"Failed to discover tools for server {servers[i].name}: {res}")
+            else:
+                all_tools.extend(res)
+        return all_tools
+
+
+class MockToolDiscoverer(ToolDiscoverer):
+    """Returns realistic fixture data for testing purposes."""
+
+    async def discover_tools(self, server: ServerConfig) -> list[DiscoveredTool]:
+        await asyncio.sleep(0.1) # Simulate network delay
+        return [
+            DiscoveredTool(
+                server_name=server.name,
+                tool_name="read_file",
+                description="Read contents of a file on the local filesystem.",
+                input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+                annotations={"readOnlyHint": True}
+            ),
+            DiscoveredTool(
+                server_name=server.name,
+                tool_name="send_email",
+                description="Send an email to a recipient.",
+                input_schema={"type": "object", "properties": {"to": {"type": "string"}, "body": {"type": "string"}}},
+            ),
+            DiscoveredTool(
+                server_name=server.name,
+                tool_name="query_database",
+                description="Execute a SQL query against the internal database.",
+                input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
+                annotations={"destructiveHint": False}
+            ),
+            DiscoveredTool(
+                server_name=server.name,
+                tool_name="post_to_slack",
+                description="Post a message to a Slack channel.",
+                input_schema={"type": "object", "properties": {"channel": {"type": "string"}, "message": {"type": "string"}}},
+            )
+        ]

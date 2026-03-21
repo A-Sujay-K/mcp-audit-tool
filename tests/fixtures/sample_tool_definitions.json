@@ -1,0 +1,51 @@
+[
+  {
+    "server_name": "filesystem",
+    "name": "read_file",
+    "description": "Reads a file from the local filesystem",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": {"type": "string"}
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "server_name": "slack",
+    "name": "post_message",
+    "description": "Posts a message to Slack",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "channel_id": {"type": "string"},
+        "text": {"type": "string"}
+      },
+      "required": ["channel_id", "text"]
+    }
+  },
+  {
+    "server_name": "database",
+    "name": "query_users",
+    "description": "Query the users table",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "limit": {"type": "integer"}
+      }
+    }
+  },
+  {
+    "server_name": "github",
+    "name": "create_issue",
+    "description": "Creates a github issue",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "repo": {"type": "string"},
+        "title": {"type": "string"},
+        "body": {"type": "string"}
+      }
+    }
+  }
+]
