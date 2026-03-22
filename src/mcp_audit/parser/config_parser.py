@@ -29,11 +29,12 @@ class ConfigParser:
             return "claude_code"
         return "generic"
 
-    def _has_auth(self, env: dict[str, str]) -> bool:
-        """Check if environment variables contain authentication tokens."""
-        for key in env.keys():
-            if any(pattern in key.lower() for pattern in self.auth_patterns):
-                return True
+    def _has_auth(self, env: dict) -> bool:
+        """Check env vars for authentication token patterns."""
+        return any(
+            any(p in k.lower() for p in self.auth_patterns)
+            for k in env
+        )
         return False
 
     def _parse_standard_config(self, data: dict[str, Any], client_type: str, path: Path) -> ClientConfig:
