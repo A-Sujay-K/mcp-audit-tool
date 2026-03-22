@@ -14,7 +14,7 @@ class ConfigParser:
     def __init__(self):
         self.auth_patterns = {"token","key","secret","password","auth","credential","api_key"}
 
-    def _detect_client_type(self, path: Path) -> str:
+    def _detect_client_type(self, path: Path) -> str:  # noqa: PLR0912
         """Infer the client type from the path."""
         path_str = str(path).lower()
         if "claude_desktop_config.json" in path_str:
