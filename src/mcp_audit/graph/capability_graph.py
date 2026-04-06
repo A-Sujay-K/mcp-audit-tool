@@ -58,3 +58,27 @@ class CapabilityGraphBuilder:
                 "tool_name": data.get("tool_name"),
                 "capabilities": data.get("capabilities", []),
                 "confidence": data.get("confidence"),
+            })
+        edges = []
+        for u, v, data in self.graph.edges(data=True):
+            edges.append({
+                "source": u,
+                "target": v,
+                "edge_type": data.get("edge_type"),
+                "is_cross_server": data.get("is_cross_server")
+            })
+        return {"nodes": nodes, "edges": edges}
+
+    def get_servers(self) -> list[str]:
+        servers = set()
+        for n, data in self.graph.nodes(data=True):
+            if "server_name" in data:
+                servers.add(data["server_name"])
+        return list(servers)
+
+    def get_cross_server_edges(self) -> list[tuple]:
+        cross_server = []
+        for u, v, data in self.graph.edges(data=True):
+            if data.get("is_cross_server"):
+                cross_server.append((u, v, data))
+        return cross_server
