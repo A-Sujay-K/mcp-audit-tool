@@ -82,3 +82,36 @@ class TrifectaAnalyzer:
                     data_tool=self._create_dummy_tool(cred),
                     exfil_tool=self._create_dummy_tool(exfil),
                     is_cross_server=is_cross_server,
+                    description=f"Credentials managed by '{cred['tool_name']}' could be exfiltrated via '{exfil['tool_name']}'.",
+                    mitigation="Restrict network access for tools that manage credentials or isolate them."
+                )
+                findings.append(finding)
+        return findings
+
+    def find_filesystem_manipulation_chains(self) -> list[TrifectaFinding]:
+        findings = []
+        ingest_tools = self._get_tools_with_capability(ToolCapability.INGESTS_UNTRUSTED)
+        mod_tools = self._get_tools_with_capability(ToolCapability.MODIFIES_FILESYSTEM)
+
+        for inj in ingest_tools:
+            for mod in mod_tools:
+                is_cross_server = inj.get('server_name') != mod.get('server_name')
+
+                finding = TrifectaFinding(
+                    finding_type=TrifectaType.FILESYSTEM_MANIPULATION,
+                    injection_tool=self._create_dummy_tool(inj),
+                    data_tool=self._create_dummy_tool(mod),
+                    is_cross_server=is_cross_server,
+                    description=f"Untrusted input from '{inj['tool_name']}' could lead to unauthorized filesystem changes via '{mod['tool_name']}'.",
+                    mitigation="Limit filesystem modification scope to isolated directories."
+                )
+                findings.append(finding)
+        return findings
+
+    def find_all(self) -> list[TrifectaFinding]:
+        findings = []
+        findings.extend(self.find_lethal_trifectas())
+        findings.extend(self.find_code_execution_chains())
+        findings.extend(self.find_credential_theft_chains())
+        findings.extend(self.find_filesystem_manipulation_chains())
+        return findings
