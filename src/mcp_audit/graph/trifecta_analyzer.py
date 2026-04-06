@@ -38,3 +38,39 @@ class TrifectaAnalyzer:
 
                     finding = TrifectaFinding(
                         finding_type=TrifectaType.LETHAL_TRIFECTA,
+                        injection_tool=self._create_dummy_tool(inj),
+                        data_tool=self._create_dummy_tool(read),
+                        exfil_tool=self._create_dummy_tool(exfil),
+                        is_cross_server=is_cross_server,
+                        description=f"An attacker could embed a prompt injection in content fetched by '{inj['tool_name']}' on server '{inj['server_name']}', instruct the agent to read sensitive data via '{read['tool_name']}' on server '{read['server_name']}', and exfiltrate it through '{exfil['tool_name']}' on server '{exfil['server_name']}'.",
+                        mitigation="Isolate these tools on different agent contexts or implement strict authorization and human-in-the-loop approvals for data exfiltration."
+                    )
+                    findings.append(finding)
+        return findings
+
+    def find_code_execution_chains(self) -> list[TrifectaFinding]:
+        findings = []
+        ingest_tools = self._get_tools_with_capability(ToolCapability.INGESTS_UNTRUSTED)
+        exec_tools = self._get_tools_with_capability(ToolCapability.EXECUTES_CODE)
+
+        for inj in ingest_tools:
+            for exc in exec_tools:
+                is_cross_server = inj.get('server_name') != exc.get('server_name')
+
+                finding = TrifectaFinding(
+                    finding_type=TrifectaType.CODE_EXECUTION_CHAIN,
+                    injection_tool=self._create_dummy_tool(inj),
+                    exfil_tool=self._create_dummy_tool(exc),
+                    is_cross_server=is_cross_server,
+                    description=f"An attacker could provide malicious instructions via '{inj['tool_name']}' to execute arbitrary code via '{exc['tool_name']}'.",
+                    mitigation="Implement a sandbox for code execution or remove arbitrary code execution capabilities."
+                )
+                findings.append(finding)
+        return findings
+
+    def find_credential_theft_chains(self) -> list[TrifectaFinding]:
+        findings = []
+        cred_tools = self._get_tools_with_capability(ToolCapability.MANAGES_CREDENTIALS)
+        exfil_tools = self._get_tools_with_capability(ToolCapability.SENDS_DATA_OUT)
+
+        for cred in cred_tools:
