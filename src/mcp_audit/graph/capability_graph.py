@@ -1,4 +1,4 @@
-import networkx as nx
+"""Capability graph builder for cross-server data-flow analysis."""
 
 from mcp_audit.parser.schemas import ClassifiedTool, ToolCapability
 
