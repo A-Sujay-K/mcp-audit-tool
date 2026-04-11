@@ -37,3 +37,35 @@ class RiskScorer:
 
         for tool in tools:
             if tool.description:
+                desc_lower = tool.description.lower()
+                if "destructive" in desc_lower or "open world" in desc_lower:
+                    has_hints = True
+                if len(tool.description) < 20:
+                    has_short_desc = True
+
+            if any(cap == ToolCapability.EXECUTES_CODE for cap in tool.capabilities):
+                has_rce = True
+
+        if has_hints: score += 1.0
+        if has_short_desc: score += 1.0
+        if has_rce: score += 1.0
+
+        return min(score, 10.0)
+
+    def score_all(self, findings: list[TrifectaFinding], server_configs: list[ServerConfig] | None = None) -> list[TrifectaFinding]:
+        for f in findings:
+            f.risk_score = self.score_finding(f, server_configs)
+        findings.sort(key=lambda x: x.risk_score, reverse=True)
+        return findings
+
+    def compute_overall_risk(self, findings: list[TrifectaFinding], server_configs: list[ServerConfig] | None = None) -> float:
+        if not findings:
+            return 0.0
+
+        scored = self.score_all(findings, server_configs)
+        max_score = scored[0].risk_score
+
+        high_severity_count = sum(1 for f in scored[1:] if f.risk_score > 7.0)
+        overall = max_score + (0.5 * high_severity_count)
+
+        return min(overall, 10.0)
