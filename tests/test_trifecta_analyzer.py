@@ -39,3 +39,31 @@ class TestTrifectaAnalyzer:
 
     def test_no_findings_for_safe_tools(self):
         """Tools with only read capability should not trigger findings."""
+        from mcp_audit.parser.schemas import ClassifiedTool, ToolCapability
+
+        safe_tools = [
+            ClassifiedTool(
+                server_name="safe",
+                tool_name="list_items",
+                description="List items in the database.",
+                capabilities=[ToolCapability.READS_SENSITIVE_DATA],
+                confidence=0.9,
+            ),
+        ]
+
+        builder = CapabilityGraphBuilder()
+        graph = builder.build(safe_tools)
+        analyzer = TrifectaAnalyzer(graph)
+
+        assert len(analyzer.find_lethal_trifectas()) == 0
+        assert len(analyzer.find_code_execution_chains()) == 0
+
+    def test_trifecta_has_description(self, sample_classified_tools):
+        """Each finding should have a human-readable attack narrative."""
+        builder = CapabilityGraphBuilder()
+        graph = builder.build(sample_classified_tools)
+        analyzer = TrifectaAnalyzer(graph)
+
+        findings = analyzer.find_lethal_trifectas()
+        if findings:
+            assert len(findings[0].description) > 20
