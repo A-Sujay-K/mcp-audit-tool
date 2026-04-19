@@ -131,3 +131,48 @@ def _classify_change(
     old: ClassifiedTool, new: ClassifiedTool
 ) -> tuple[DriftType, str, str]:
     """Classify what kind of drift occurred between two versions of the same tool."""
+    old_caps = set(old.capabilities or [])
+    new_caps = set(new.capabilities or [])
+
+    # Capability escalation — most dangerous
+    gained = new_caps - old_caps
+    if gained:
+        gained_strs = ", ".join(c.value if hasattr(c, "value") else c for c in gained)
+        return (
+            DriftType.CAPABILITY_ESCALATION,
+            "critical",
+            f"Tool gained new capabilities: {gained_strs}",
+        )
+
+    # Capability de-escalation — less concerning
+    lost = old_caps - new_caps
+    if lost:
+        lost_strs = ", ".join(c.value if hasattr(c, "value") else c for c in lost)
+        return (
+            DriftType.CAPABILITY_DEESCALATION,
+            "low",
+            f"Tool lost capabilities: {lost_strs}",
+        )
+
+    # Schema change
+    if old.input_schema != new.input_schema:
+        return (
+            DriftType.SCHEMA_CHANGED,
+            "high",
+            "Tool input schema has changed — may accept new attack surfaces",
+        )
+
+    # Description change — possible tool poisoning
+    if old.description != new.description:
+        return (
+            DriftType.DESCRIPTION_CHANGED,
+            "high",
+            "Tool description changed — check for hidden instructions or social engineering",
+        )
+
+    # Generic catch-all
+    return (
+        DriftType.DESCRIPTION_CHANGED,
+        "medium",
+        "Tool definition changed",
+    )
