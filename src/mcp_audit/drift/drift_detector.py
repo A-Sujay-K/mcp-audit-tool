@@ -78,3 +78,56 @@ class DriftDetector:
                     DriftEvent(
                         server_name=server_name,
                         tool_name=tool_name,
+                        drift_type=DriftType.TOOL_REMOVED,
+                        description=f"Tool '{tool_name}' was removed from server '{server_name}'",
+                        old_hash=old_hashes.get(key),
+                        severity="low",
+                    )
+                )
+
+        return events
+
+    @staticmethod
+    def format_drift_report(events: list[DriftEvent]) -> str:
+        """Format drift events into a human-readable Rich-compatible report."""
+        if not events:
+            return "[bold green]✅ No drift detected.[/bold green]"
+
+        lines = [f"[bold red]⚠️ {len(events)} drift event(s) detected:[/bold red]\n"]
+        for event in events:
+            severity_colors = {
+                "critical": "bold red",
+                "high": "red",
+                "medium": "yellow",
+                "low": "dim",
+            }
+            color = severity_colors.get(event.severity, "white")
+            lines.append(
+                f"  [{color}][{event.severity.upper()}][/{color}] "
+                f"{event.drift_type.value}: "
+                f"[cyan]{event.server_name}:{event.tool_name}[/cyan]"
+            )
+            lines.append(f"    {event.description}")
+            if event.old_hash and event.new_hash:
+                lines.append(
+                    f"    [dim]Hash: {event.old_hash[:12]}… → {event.new_hash[:12]}…[/dim]"
+                )
+            lines.append("")
+
+        return "\n".join(lines)
+
+
+def _has_dangerous_caps(tool: ClassifiedTool) -> bool:
+    """Check if a tool has any high-risk capabilities."""
+    dangerous = {
+        ToolCapability.EXECUTES_CODE,
+        ToolCapability.MANAGES_CREDENTIALS,
+        ToolCapability.SENDS_DATA_OUT,
+    }
+    return bool(set(tool.capabilities or []) & dangerous)
+
+
+def _classify_change(
+    old: ClassifiedTool, new: ClassifiedTool
+) -> tuple[DriftType, str, str]:
+    """Classify what kind of drift occurred between two versions of the same tool."""
