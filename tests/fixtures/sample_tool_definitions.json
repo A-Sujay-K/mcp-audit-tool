@@ -1,51 +1,124 @@
-[
-  {
-    "server_name": "filesystem",
-    "name": "read_file",
-    "description": "Reads a file from the local filesystem",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "path": {"type": "string"}
-      },
-      "required": ["path"]
-    }
-  },
-  {
-    "server_name": "slack",
-    "name": "post_message",
-    "description": "Posts a message to Slack",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "channel_id": {"type": "string"},
-        "text": {"type": "string"}
-      },
-      "required": ["channel_id", "text"]
-    }
-  },
-  {
-    "server_name": "database",
-    "name": "query_users",
-    "description": "Query the users table",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "limit": {"type": "integer"}
+{
+  "filesystem_tools": [
+    {
+      "name": "read_file",
+      "description": "Read the contents of a file at the specified path",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "description": "Absolute or relative file path"}
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "write_file",
+      "description": "Write content to a file, creating it if it does not exist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"},
+          "content": {"type": "string"}
+        },
+        "required": ["path", "content"]
+      }
+    },
+    {
+      "name": "list_directory",
+      "description": "List all files and subdirectories at the given path",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"}
+        },
+        "required": ["path"]
       }
     }
-  },
-  {
-    "server_name": "github",
-    "name": "create_issue",
-    "description": "Creates a github issue",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "repo": {"type": "string"},
-        "title": {"type": "string"},
-        "body": {"type": "string"}
+  ],
+  "network_tools": [
+    {
+      "name": "fetch_url",
+      "description": "Fetch the content of a URL and return the response body",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {"type": "string", "format": "uri"},
+          "method": {"type": "string", "enum": ["GET", "POST"], "default": "GET"},
+          "headers": {"type": "object"},
+          "body": {"type": "string"}
+        },
+        "required": ["url"]
+      }
+    },
+    {
+      "name": "post_webhook",
+      "description": "Send a POST request to a webhook URL with a JSON payload",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "webhook_url": {"type": "string", "format": "uri"},
+          "payload": {"type": "object"}
+        },
+        "required": ["webhook_url", "payload"]
       }
     }
-  }
-]
+  ],
+  "communication_tools": [
+    {
+      "name": "send_slack_message",
+      "description": "Send a message to a Slack channel or direct message",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "channel": {"type": "string"},
+          "text": {"type": "string"},
+          "blocks": {"type": "array"}
+        },
+        "required": ["channel", "text"]
+      }
+    },
+    {
+      "name": "send_email",
+      "description": "Send an email to one or more recipients",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "to": {"type": "array", "items": {"type": "string", "format": "email"}},
+          "subject": {"type": "string"},
+          "body": {"type": "string"},
+          "attachments": {"type": "array"}
+        },
+        "required": ["to", "subject", "body"]
+      }
+    }
+  ],
+  "code_execution_tools": [
+    {
+      "name": "run_shell_command",
+      "description": "Execute a shell command and return stdout and stderr",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command": {"type": "string"},
+          "cwd": {"type": "string"},
+          "timeout": {"type": "integer", "default": 30}
+        },
+        "required": ["command"]
+      }
+    }
+  ],
+  "credential_tools": [
+    {
+      "name": "get_secret",
+      "description": "Retrieve a secret value from the configured secret store",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "secret_name": {"type": "string"},
+          "namespace": {"type": "string", "default": "default"}
+        },
+        "required": ["secret_name"]
+      }
+    }
+  ]
+}
