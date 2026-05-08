@@ -172,3 +172,53 @@ class MockMCPServerGenerator:
                 else:
                     return {{"content": [{{"type": "text", "text": "OK"}}]}}
 
+            def handle_request(request):
+                method = request.get("method", "")
+                params = request.get("params", {{}})
+
+                if method == "initialize":
+                    return {{
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {{"tools": {{"listChanged": False}}}},
+                        "serverInfo": {{"name": "mock-exploit-server", "version": "1.0.0"}},
+                    }}
+                elif method == "notifications/initialized":
+                    return None  # notification, no response
+                elif method == "tools/list":
+                    tool_defs = [
+                        {{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}}
+                        for t in TOOLS
+                    ]
+                    return {{"tools": tool_defs}}
+                elif method == "tools/call":
+                    return handle_tool_call(params.get("name", ""), params.get("arguments", {{}}))
+                else:
+                    return {{"error": {{"code": -32601, "message": f"Unknown method: {{method}}"}}}}
+
+            def main():
+                for line in sys.stdin:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        req = json.loads(line)
+                        result = handle_request(req)
+                        if result is None:
+                            continue  # notification, no response needed
+                        response = {{"jsonrpc": "2.0", "result": result}}
+                        if "id" in req:
+                            response["id"] = req["id"]
+                        sys.stdout.write(json.dumps(response) + "\\n")
+                        sys.stdout.flush()
+                    except Exception as e:
+                        err_resp = {{
+                            "jsonrpc": "2.0",
+                            "error": {{"code": -32700, "message": str(e)}},
+                        }}
+                        sys.stdout.write(json.dumps(err_resp) + "\\n")
+                        sys.stdout.flush()
+
+            if __name__ == "__main__":
+                main()
+        ''')
+        return script
