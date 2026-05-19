@@ -1,150 +1,109 @@
-"""Shared test fixtures for the MCP Audit Tool test suite."""
+"""Shared pytest fixtures for the mcp-audit test suite."""
+from __future__ import annotations
+
+import asyncio
+import json
+import tempfile
+from pathlib import Path
+from typing import AsyncGenerator
 
 import pytest
-
-from mcp_audit.config import Settings
-from mcp_audit.parser.schemas import (
-    ClassifiedTool,
-    DiscoveredTool,
-    ServerConfig,
-    ToolCapability,
-    TransportType,
-)
+import pytest_asyncio
 
 
-@pytest.fixture
-def sample_settings():
-    """Return a Settings instance with test defaults."""
-    return Settings(
-        llm_provider="openai",
-        llm_model="gpt-4o",
-        llm_api_key="test-key",
-        sandbox_enabled=False,
-    )
+# ── Async event loop ─────────────────────────────────────────────────────────
 
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create a single event loop for the entire test session."""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+# ── Config file fixtures ─────────────────────────────────────────────────────
 
 @pytest.fixture
-def sample_server_configs():
-    """Return raw JSON config data matching Claude Desktop format."""
-    return {
+def claude_config_path(tmp_path: Path) -> Path:
+    """Write a sample Claude Desktop config to a temp file."""
+    config = {
         "mcpServers": {
             "filesystem": {
                 "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-filesystem", "/"],
-            },
-            "fetch": {
-                "command": "uvx",
-                "args": ["mcp-server-fetch"],
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
             },
             "slack": {
                 "command": "npx",
-                "args": ["-y", "@anthropic/mcp-server-slack"],
-                "env": {
-                    "SLACK_TOKEN": "xoxb-test-token",
-                },
+                "args": ["-y", "@modelcontextprotocol/server-slack"],
+                "env": {"SLACK_BOT_TOKEN": "xoxb-test-token"},
             },
         }
     }
+    p = tmp_path / "claude_desktop_config.json"
+    p.write_text(json.dumps(config))
+    return p
 
 
 @pytest.fixture
-def sample_servers():
-    """Return parsed ServerConfig objects."""
-    return [
-        ServerConfig(
-            name="filesystem",
-            transport=TransportType.STDIO,
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-filesystem", "/"],
-            has_auth=False,
-        ),
-        ServerConfig(
-            name="fetch",
-            transport=TransportType.STDIO,
-            command="uvx",
-            args=["mcp-server-fetch"],
-            has_auth=False,
-        ),
-        ServerConfig(
-            name="slack",
-            transport=TransportType.STDIO,
-            command="npx",
-            args=["-y", "@anthropic/mcp-server-slack"],
-            env={"SLACK_TOKEN": "xoxb-test-token"},
-            has_auth=True,
-        ),
-    ]
+def cursor_config_path(tmp_path: Path) -> Path:
+    """Write a sample Cursor MCP config to a temp file."""
+    config = {
+        "mcpServers": {
+            "fetch": {
+                "command": "uvx",
+                "args": ["mcp-server-fetch"],
+            }
+        }
+    }
+    p = tmp_path / "mcp.json"
+    p.write_text(json.dumps(config))
+    return p
 
 
 @pytest.fixture
-def sample_discovered_tools():
-    """Return DiscoveredTool objects from mock tool discovery."""
+def empty_config_path(tmp_path: Path) -> Path:
+    """Write an empty MCP config."""
+    p = tmp_path / "empty_config.json"
+    p.write_text(json.dumps({"mcpServers": {}}))
+    return p
+
+
+@pytest.fixture
+def malformed_config_path(tmp_path: Path) -> Path:
+    """Write a malformed JSON file."""
+    p = tmp_path / "bad_config.json"
+    p.write_text("{ this is not valid json }")
+    return p
+
+
+# ── Tool fixture helpers ──────────────────────────────────────────────────────
+
+@pytest.fixture
+def mock_discovered_tools():
+    """Return a list of mock discovered tools covering all capability types."""
+    from mcp_audit.parser.schemas import DiscoveredTool, TransportType
     return [
         DiscoveredTool(
             server_name="filesystem",
-            tool_name="read_file",
-            description="Read the complete contents of a file from the filesystem.",
+            name="read_file",
+            description="Read the contents of a file at the specified path",
             input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+            transport=TransportType.STDIO,
         ),
         DiscoveredTool(
             server_name="fetch",
-            tool_name="fetch_url",
-            description="Fetch content from a URL and return the text.",
+            name="fetch_url",
+            description="Fetch content from a URL and return the response body",
             input_schema={"type": "object", "properties": {"url": {"type": "string"}}},
+            transport=TransportType.STDIO,
         ),
         DiscoveredTool(
             server_name="slack",
-            tool_name="send_message",
-            description="Send a message to a Slack channel.",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "channel": {"type": "string"},
-                    "text": {"type": "string"},
-                },
-            },
+            name="send_message",
+            description="Send a message to a Slack channel",
+            input_schema={"type": "object", "properties": {
+                "channel": {"type": "string"}, "text": {"type": "string"}
+            }},
+            transport=TransportType.STDIO,
         ),
     ]
-
-
-@pytest.fixture
-def sample_classified_tools():
-    """Return ClassifiedTool objects with capability assignments."""
-    return [
-        ClassifiedTool(
-            server_name="filesystem",
-            tool_name="read_file",
-            description="Read the complete contents of a file from the filesystem.",
-            input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
-            capabilities=[ToolCapability.READS_SENSITIVE_DATA],
-            confidence=0.95,
-        ),
-        ClassifiedTool(
-            server_name="fetch",
-            tool_name="fetch_url",
-            description="Fetch content from a URL and return the text.",
-            input_schema={"type": "object", "properties": {"url": {"type": "string"}}},
-            capabilities=[ToolCapability.INGESTS_UNTRUSTED],
-            confidence=0.92,
-        ),
-        ClassifiedTool(
-            server_name="slack",
-            tool_name="send_message",
-            description="Send a message to a Slack channel.",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "channel": {"type": "string"},
-                    "text": {"type": "string"},
-                },
-            },
-            capabilities=[ToolCapability.SENDS_DATA_OUT],
-            confidence=0.97,
-        ),
-    ]
-
-
-@pytest.fixture
-def lethal_trifecta_tools(sample_classified_tools):
-    """Return the classic lethal trifecta: read + ingest + send across 3 servers."""
-    return sample_classified_tools

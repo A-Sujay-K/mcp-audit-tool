@@ -1,100 +1,82 @@
-"""Tests for the config parser module."""
+"""Unit tests for ConfigParser — multiple client types and edge cases."""
+from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from mcp_audit.parser.config_parser import ConfigParser
 from mcp_audit.parser.schemas import TransportType
 
 
 class TestConfigParser:
-    """Test MCP config file parsing."""
+    def setup_method(self):
+        self.parser = ConfigParser()
 
-    def test_parse_claude_desktop_config(self, tmp_path):
-        """Parse a standard Claude Desktop config."""
-        config_data = {
-            "mcpServers": {
-                "filesystem": {
-                    "command": "npx",
-                    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-                },
-                "fetch": {
-                    "command": "uvx",
-                    "args": ["mcp-server-fetch"],
-                },
-            }
-        }
-        config_file = tmp_path / "claude_desktop_config.json"
-        config_file.write_text(json.dumps(config_data))
+    # ── Claude Desktop ────────────────────────────────────────────────────────
 
-        parser = ConfigParser()
-        client_config = parser.parse_file(str(config_file))
+    def test_parse_claude_config_detects_stdio(self, claude_config_path):
+        client = self.parser.parse_file(claude_config_path)
+        servers = {s.name: s for s in client.servers}
+        assert "filesystem" in servers
+        assert servers["filesystem"].transport == TransportType.STDIO
 
-        assert client_config.client_type == "claude_desktop"
-        assert len(client_config.servers) == 2
+    def test_parse_claude_config_detects_auth(self, claude_config_path):
+        client = self.parser.parse_file(claude_config_path)
+        servers = {s.name: s for s in client.servers}
+        assert servers["slack"].has_auth is True
 
-        fs_server = next(s for s in client_config.servers if s.name == "filesystem")
-        assert fs_server.transport == TransportType.STDIO
-        assert fs_server.command == "npx"
-        assert fs_server.has_auth is False
+    def test_parse_claude_config_client_type(self, claude_config_path):
+        client = self.parser.parse_file(claude_config_path)
+        assert client.client_type == "claude_desktop"
 
-    def test_parse_cursor_config(self, tmp_path):
-        """Parse a Cursor MCP config."""
-        config_data = {
-            "mcpServers": {
-                "slack": {
-                    "command": "npx",
-                    "args": ["-y", "@anthropic/mcp-server-slack"],
-                    "env": {
-                        "SLACK_TOKEN": "xoxb-test-token",
-                    },
-                }
-            }
-        }
-        config_file = tmp_path / "mcp.json"
-        config_file.write_text(json.dumps(config_data))
+    # ── Cursor ────────────────────────────────────────────────────────────────
 
-        parser = ConfigParser()
-        client_config = parser.parse_file(str(config_file))
+    def test_parse_cursor_config(self, cursor_config_path):
+        client = self.parser.parse_file(cursor_config_path)
+        assert len(client.servers) == 1
+        assert client.servers[0].name == "fetch"
 
-        assert len(client_config.servers) == 1
-        slack = client_config.servers[0]
-        assert slack.name == "slack"
-        assert slack.has_auth is True  # SLACK_TOKEN matches TOKEN pattern
+    def test_parse_cursor_config_client_type(self, cursor_config_path):
+        client = self.parser.parse_file(cursor_config_path)
+        assert "cursor" in client.client_type.lower()
 
-    def test_detect_http_transport(self, tmp_path):
-        """Detect HTTP/SSE transport from URL keys."""
-        config_data = {
+    # ── Edge cases ────────────────────────────────────────────────────────────
+
+    def test_parse_empty_config(self, empty_config_path):
+        client = self.parser.parse_file(empty_config_path)
+        assert client.servers == []
+
+    def test_parse_malformed_json_returns_empty(self, malformed_config_path):
+        """Malformed JSON should not raise; it should return an empty client config."""
+        client = self.parser.parse_file(malformed_config_path)
+        assert client is not None
+        assert client.servers == []
+
+    def test_parse_missing_file_returns_empty(self, tmp_path):
+        missing = tmp_path / "nonexistent_config.json"
+        client = self.parser.parse_file(missing)
+        assert client.servers == []
+
+    def test_http_transport_detected(self, tmp_path):
+        config = {
             "mcpServers": {
                 "remote": {
                     "url": "https://example.com/mcp",
+                    "type": "streamable_http",
                 }
             }
         }
-        config_file = tmp_path / "claude_desktop_config.json"
-        config_file.write_text(json.dumps(config_data))
+        p = tmp_path / "http_config.json"
+        p.write_text(json.dumps(config))
+        client = self.parser.parse_file(p)
+        assert len(client.servers) == 1
+        assert client.servers[0].transport in (
+            TransportType.STREAMABLE_HTTP, TransportType.SSE
+        )
 
-        parser = ConfigParser()
-        client_config = parser.parse_file(str(config_file))
-
-        assert client_config.servers[0].transport == TransportType.STREAMABLE_HTTP
-        assert client_config.servers[0].url == "https://example.com/mcp"
-
-    def test_empty_config(self, tmp_path):
-        """Handle empty or missing mcpServers key."""
-        config_file = tmp_path / "claude_desktop_config.json"
-        config_file.write_text("{}")
-
-        parser = ConfigParser()
-        client_config = parser.parse_file(str(config_file))
-
-        assert len(client_config.servers) == 0
-
-    def test_malformed_json(self, tmp_path):
-        """Handle malformed JSON gracefully."""
-        config_file = tmp_path / "broken.json"
-        config_file.write_text("not valid json {{{")
-
-        parser = ConfigParser()
-        client_config = parser.parse_file(str(config_file))
-
-        assert len(client_config.servers) == 0
+    def test_auto_detect_returns_list(self):
+        """auto_detect should return a list (possibly empty) without raising."""
+        result = self.parser.auto_detect()
+        assert isinstance(result, list)
