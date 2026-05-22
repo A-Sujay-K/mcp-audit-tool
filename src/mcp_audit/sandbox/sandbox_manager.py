@@ -1,4 +1,4 @@
-"""Docker sandbox manager for isolated exploit confirmation.
+"""Sandbox manager — Docker isolation for red-team exploit execution."""
 
 Manages the lifecycle of Docker containers used to safely run exploit
 attempts against mock MCP servers. All containers run with network disabled,
