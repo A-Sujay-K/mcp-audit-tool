@@ -55,3 +55,45 @@ class AuditRepository:
         self.session.add(server)
         await self.session.flush()
         return server
+
+    async def create_tool(self, tool: ToolSnapshotRecord) -> ToolSnapshotRecord:
+        self.session.add(tool)
+        await self.session.flush()
+        return tool
+
+    async def get_tools_for_scan(self, scan_id: uuid.UUID) -> list[ToolSnapshotRecord]:
+        stmt = select(ToolSnapshotRecord).join(ServerSnapshotRecord).where(ServerSnapshotRecord.scan_id == scan_id)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def create_finding(self, finding: FindingRecord) -> FindingRecord:
+        self.session.add(finding)
+        await self.session.flush()
+        return finding
+
+    async def get_findings_for_scan(self, scan_id: uuid.UUID) -> list[FindingRecord]:
+        result = await self.session.execute(select(FindingRecord).where(FindingRecord.scan_id == scan_id))
+        return list(result.scalars().all())
+
+    async def get_finding(self, finding_id: uuid.UUID) -> FindingRecord | None:
+        result = await self.session.execute(select(FindingRecord).where(FindingRecord.id == finding_id))
+        return result.scalar_one_or_none()
+
+    async def update_finding_status(self, finding_id: uuid.UUID, status: str) -> FindingRecord | None:
+        await self.session.execute(update(FindingRecord).where(FindingRecord.id == finding_id).values(status=status))
+        await self.session.flush()
+        return await self.get_finding(finding_id)
+
+    async def create_exploit_result(self, result: ExploitResultRecord) -> ExploitResultRecord:
+        self.session.add(result)
+        await self.session.flush()
+        return result
+
+    async def create_drift_event(self, event: DriftEventRecord) -> DriftEventRecord:
+        self.session.add(event)
+        await self.session.flush()
+        return event
+
+    async def get_drift_events(self) -> list[DriftEventRecord]:
+        result = await self.session.execute(select(DriftEventRecord).order_by(DriftEventRecord.timestamp.desc()))
+        return list(result.scalars().all())
