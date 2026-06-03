@@ -1,4 +1,4 @@
-import uuid
+"""Async SQLAlchemy repository — scan, finding, and drift storage."""
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
