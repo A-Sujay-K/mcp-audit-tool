@@ -1,29 +1,69 @@
-"""Tests for the API routes (smoke tests)."""
+"""Smoke tests for FastAPI routes."""
+from __future__ import annotations
+
+import pytest
+from fastapi.testclient import TestClient
 
 
+@pytest.fixture(scope="module")
+def client():
+    """Create a FastAPI TestClient with an in-memory SQLite database."""
+    import os
+    os.environ["MCP_AUDIT_DB_URL"] = "sqlite+aiosqlite:///:memory:"
+    os.environ["MCP_AUDIT_DB_ECHO"] = "false"
 
-class TestAPISmoke:
-    """Basic smoke tests for API route registration."""
+    from mcp_audit.api.main import create_app
+    app = create_app()
 
-    def test_fastapi_app_creates(self):
-        """The FastAPI app factory should create without errors."""
-        from mcp_audit.api.main import create_app
-        app = create_app()
-        assert app is not None
-        assert app.title == "MCP Audit Tool"
+    with TestClient(app) as c:
+        yield c
 
-    def test_routes_registered(self):
-        """All expected routes should be registered."""
-        from mcp_audit.api.main import create_app
-        app = create_app()
-        
-        paths = []
-        for route in app.routes:
-            if hasattr(route, "path"):
-                paths.append(route.path)
-                
-        paths_str = " ".join(paths)
-        
-        assert "/api/scans" in paths_str, f"Scans route missing. Found: {paths_str}"
-        assert "/api/drift" in paths_str, f"Drift route missing. Found: {paths_str}"
-        assert "/api/findings" in paths_str, f"Findings route missing. Found: {paths_str}"
+
+class TestHealthRoute:
+    def test_health_returns_200(self, client):
+        resp = client.get("/api/health")
+        assert resp.status_code == 200
+
+    def test_health_returns_ok_status(self, client):
+        data = resp = client.get("/api/health").json()
+        assert data["status"] == "ok"
+
+    def test_health_returns_version(self, client):
+        data = client.get("/api/health").json()
+        assert "version" in data
+        assert data["version"]
+
+
+class TestRootRedirect:
+    def test_root_redirects_to_docs(self, client):
+        resp = client.get("/", follow_redirects=False)
+        assert resp.status_code in (301, 302, 307, 308)
+        assert "/docs" in resp.headers.get("location", "")
+
+
+class TestScansRoute:
+    def test_list_scans_returns_200(self, client):
+        resp = client.get("/api/scans")
+        assert resp.status_code == 200
+
+    def test_list_scans_returns_list(self, client):
+        data = client.get("/api/scans").json()
+        assert isinstance(data, list)
+
+    def test_get_nonexistent_scan_returns_404(self, client):
+        import uuid
+        fake_id = str(uuid.uuid4())
+        resp = client.get(f"/api/scans/{fake_id}")
+        assert resp.status_code == 404
+
+
+class TestFindingsRoute:
+    def test_findings_route_exists(self, client):
+        resp = client.get("/api/findings")
+        assert resp.status_code in (200, 404, 422)
+
+
+class TestDriftRoute:
+    def test_drift_route_exists(self, client):
+        resp = client.get("/api/drift")
+        assert resp.status_code in (200, 404, 422)

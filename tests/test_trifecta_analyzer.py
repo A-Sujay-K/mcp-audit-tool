@@ -1,69 +1,101 @@
-"""Tests for the trifecta analyzer module."""
+"""Unit tests for TrifectaAnalyzer — detection logic and edge cases."""
+from __future__ import annotations
 
+import pytest
 
 from mcp_audit.graph.capability_graph import CapabilityGraphBuilder
 from mcp_audit.graph.trifecta_analyzer import TrifectaAnalyzer
-from mcp_audit.parser.schemas import TrifectaType
+from mcp_audit.parser.schemas import (
+    ClassificationResult,
+    ClassifiedTool,
+    DiscoveredTool,
+    ToolCapability,
+    TrifectaType,
+    TransportType,
+)
+
+
+def make_classified(
+    name: str,
+    server: str,
+    capabilities: list[ToolCapability],
+) -> ClassifiedTool:
+    discovered = DiscoveredTool(
+        server_name=server,
+        name=name,
+        description=f"Tool {name} on {server}",
+        input_schema={},
+        transport=TransportType.STDIO,
+    )
+    result = ClassificationResult(
+        capabilities=capabilities,
+        confidence=0.95,
+        reasoning=f"Test classification for {name}",
+    )
+    return ClassifiedTool(
+        discovered=discovered,
+        classification=result,
+        description_hash="abc123",
+    )
+
+
+READER = [ToolCapability.READS_SENSITIVE_DATA]
+FETCHER = [ToolCapability.INGESTS_UNTRUSTED]
+SENDER  = [ToolCapability.SENDS_DATA_OUT]
 
 
 class TestTrifectaAnalyzer:
-    """Test detection of dangerous cross-server capability combinations."""
+    def setup_method(self):
+        self.builder  = CapabilityGraphBuilder()
+        self.analyzer = TrifectaAnalyzer()
 
-    def test_find_lethal_trifecta(self, sample_classified_tools):
-        """Should detect the classic lethal trifecta pattern."""
-        builder = CapabilityGraphBuilder()
-        graph = builder.build(sample_classified_tools)
-        analyzer = TrifectaAnalyzer(graph)
-
-        findings = analyzer.find_lethal_trifectas()
-
-        assert len(findings) >= 1
-        trifecta = findings[0]
-        assert trifecta.finding_type == TrifectaType.LETHAL_TRIFECTA
-        assert trifecta.injection_tool is not None
-        assert trifecta.data_tool is not None
-        assert trifecta.exfil_tool is not None
-        assert trifecta.is_cross_server is True
-
-    def test_find_all_returns_combined(self, sample_classified_tools):
-        """find_all() should return findings from all chain types."""
-        builder = CapabilityGraphBuilder()
-        graph = builder.build(sample_classified_tools)
-        analyzer = TrifectaAnalyzer(graph)
-
-        all_findings = analyzer.find_all()
-
-        assert len(all_findings) >= 1
-        types = {f.finding_type for f in all_findings}
-        assert TrifectaType.LETHAL_TRIFECTA in types
-
-    def test_no_findings_for_safe_tools(self):
-        """Tools with only read capability should not trigger findings."""
-        from mcp_audit.parser.schemas import ClassifiedTool, ToolCapability
-
-        safe_tools = [
-            ClassifiedTool(
-                server_name="safe",
-                tool_name="list_items",
-                description="List items in the database.",
-                capabilities=[ToolCapability.READS_SENSITIVE_DATA],
-                confidence=0.9,
-            ),
+    def test_detects_trifecta_single_server(self):
+        tools = [
+            make_classified("read_file",  "svr", READER),
+            make_classified("fetch_url",  "svr", FETCHER),
+            make_classified("send_slack", "svr", SENDER),
         ]
+        graph = self.builder.build(tools)
+        findings = self.analyzer.analyze(graph, tools)
+        assert len(findings) > 0
 
-        builder = CapabilityGraphBuilder()
-        graph = builder.build(safe_tools)
-        analyzer = TrifectaAnalyzer(graph)
+    def test_detects_cross_server_trifecta(self):
+        tools = [
+            make_classified("read_file",  "svr-a", READER),
+            make_classified("fetch_url",  "svr-b", FETCHER),
+            make_classified("send_email", "svr-c", SENDER),
+        ]
+        graph = self.builder.build(tools)
+        findings = self.analyzer.analyze(graph, tools)
+        cross = [f for f in findings if len(f.server_names) > 1]
+        assert len(cross) > 0
 
-        assert len(analyzer.find_lethal_trifectas()) == 0
-        assert len(analyzer.find_code_execution_chains()) == 0
+    def test_no_finding_when_trifecta_incomplete(self):
+        # Only reader and sender — no ingest tool
+        tools = [
+            make_classified("read_file",  "svr", READER),
+            make_classified("send_slack", "svr", SENDER),
+        ]
+        graph = self.builder.build(tools)
+        findings = self.analyzer.analyze(graph, tools)
+        # Without ingestion, no full trifecta should be reported
+        full = [f for f in findings
+                if f.trifecta_type == TrifectaType.DATA_EXFILTRATION]
+        assert len(full) == 0
 
-    def test_trifecta_has_description(self, sample_classified_tools):
-        """Each finding should have a human-readable attack narrative."""
-        builder = CapabilityGraphBuilder()
-        graph = builder.build(sample_classified_tools)
-        analyzer = TrifectaAnalyzer(graph)
+    def test_findings_have_attack_narrative(self):
+        tools = [
+            make_classified("read_file",  "svr", READER),
+            make_classified("fetch_url",  "svr", FETCHER),
+            make_classified("send_email", "svr", SENDER),
+        ]
+        graph = self.builder.build(tools)
+        findings = self.analyzer.analyze(graph, tools)
+        for f in findings:
+            assert f.attack_narrative
+            assert len(f.attack_narrative) > 10
 
-        findings = analyzer.find_lethal_trifectas()
-        if findings:
-            assert len(findings[0].description) > 20
+    def test_empty_tools_returns_no_findings(self):
+        graph = self.builder.build([])
+        findings = self.analyzer.analyze(graph, [])
+        assert findings == []

@@ -1,95 +1,82 @@
-"""Tests for the capability classifier module."""
+"""Unit tests for CapabilityClassifier — rule-based and LLM fallback."""
+from __future__ import annotations
+
+import asyncio
 
 import pytest
 
 from mcp_audit.parser.capability_classifier import RuleBasedFallbackClassifier
-from mcp_audit.parser.schemas import DiscoveredTool, ToolCapability
+from mcp_audit.parser.schemas import DiscoveredTool, ToolCapability, TransportType
 
 
-class TestRuleBasedClassifier:
-    """Test the keyword-based fallback classifier."""
+def make_tool(name: str, description: str) -> DiscoveredTool:
+    return DiscoveredTool(
+        server_name="test-server",
+        name=name,
+        description=description,
+        input_schema={},
+        transport=TransportType.STDIO,
+    )
 
-    def test_classify_file_reader(self):
-        """A file-reading tool should be classified as READS_SENSITIVE_DATA."""
-        tool = DiscoveredTool(
-            server_name="filesystem",
-            tool_name="read_file",
-            description="Read the complete contents of a file from the filesystem.",
-            input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+
+class TestRuleBasedFallbackClassifier:
+    def setup_method(self):
+        self.classifier = RuleBasedFallbackClassifier()
+
+    def _classify_sync(self, tool: DiscoveredTool):
+        return asyncio.get_event_loop().run_until_complete(
+            self.classifier.classify_tool(tool)
         )
-        classifier = RuleBasedFallbackClassifier()
-        classified = classifier.classify(tool)
 
-        assert ToolCapability.READS_SENSITIVE_DATA in classified.capabilities
+    def test_read_file_classified_as_reads_sensitive(self):
+        tool = make_tool("read_file", "Read the contents of a file at a given path")
+        result = self._classify_sync(tool)
+        assert ToolCapability.READS_SENSITIVE_DATA in result.classification.capabilities
 
-    def test_classify_url_fetcher(self):
-        """A URL fetcher should be classified as INGESTS_UNTRUSTED."""
-        tool = DiscoveredTool(
-            server_name="fetch",
-            tool_name="fetch_url",
-            description="Fetch content from a URL and return the response body.",
-            input_schema={"type": "object", "properties": {"url": {"type": "string"}}},
+    def test_fetch_url_classified_as_ingests_untrusted(self):
+        tool = make_tool("fetch_url", "Fetch content from any URL on the internet")
+        result = self._classify_sync(tool)
+        assert ToolCapability.INGESTS_UNTRUSTED in result.classification.capabilities
+
+    def test_send_slack_classified_as_sends_data_out(self):
+        tool = make_tool("send_slack_message", "Send a message to a Slack channel")
+        result = self._classify_sync(tool)
+        assert ToolCapability.SENDS_DATA_OUT in result.classification.capabilities
+
+    def test_run_shell_classified_as_executes_code(self):
+        tool = make_tool("run_shell", "Execute a shell command and return the output")
+        result = self._classify_sync(tool)
+        assert ToolCapability.EXECUTES_CODE in result.classification.capabilities
+
+    def test_get_secret_classified_as_manages_credentials(self):
+        tool = make_tool("get_secret", "Retrieve a secret from the secret store by key name")
+        result = self._classify_sync(tool)
+        assert ToolCapability.MANAGES_CREDENTIALS in result.classification.capabilities
+
+    def test_benign_tool_has_no_dangerous_capabilities(self):
+        tool = make_tool("get_current_time", "Return the current UTC timestamp as a string")
+        result = self._classify_sync(tool)
+        dangerous = {
+            ToolCapability.READS_SENSITIVE_DATA,
+            ToolCapability.INGESTS_UNTRUSTED,
+            ToolCapability.SENDS_DATA_OUT,
+            ToolCapability.EXECUTES_CODE,
+        }
+        caps = set(result.classification.capabilities)
+        assert not caps.intersection(dangerous)
+
+    def test_classify_batch_returns_same_count(self):
+        tools = [
+            make_tool("read_file", "Read a file"),
+            make_tool("send_email", "Send an email to a recipient"),
+            make_tool("get_time", "Get current time"),
+        ]
+        results = asyncio.get_event_loop().run_until_complete(
+            self.classifier.classify_batch(tools)
         )
-        classifier = RuleBasedFallbackClassifier()
-        classified = classifier.classify(tool)
+        assert len(results) == len(tools)
 
-        assert ToolCapability.INGESTS_UNTRUSTED in classified.capabilities
-
-    def test_classify_message_sender(self):
-        """A message sender should be classified as SENDS_DATA_OUT."""
-        tool = DiscoveredTool(
-            server_name="slack",
-            tool_name="send_message",
-            description="Send a message to a Slack channel via the Slack API.",
-            input_schema={},
-        )
-        classifier = RuleBasedFallbackClassifier()
-        classified = classifier.classify(tool)
-
-        assert ToolCapability.SENDS_DATA_OUT in classified.capabilities
-
-    def test_classify_code_executor(self):
-        """A shell command executor should be classified as EXECUTES_CODE."""
-        tool = DiscoveredTool(
-            server_name="shell",
-            tool_name="run_command",
-            description="Execute a shell command and return stdout.",
-            input_schema={},
-        )
-        classifier = RuleBasedFallbackClassifier()
-        classified = classifier.classify(tool)
-
-        assert ToolCapability.EXECUTES_CODE in classified.capabilities
-
-    @pytest.mark.asyncio
-    async def test_classify_preserves_metadata(self):
-        """Classification should preserve the original tool metadata."""
-        from mcp_audit.config import Settings
-        from mcp_audit.parser.capability_classifier import CapabilityClassifier
-
-        tool = DiscoveredTool(
-            server_name="test-server",
-            tool_name="read_database",
-            description="Query the database for records.",
-            input_schema={"type": "object"},
-        )
-        classifier = CapabilityClassifier(Settings(llm_model="test", llm_api_key="test"))
-        classified = await classifier.classify_tool(tool)
-
-        assert classified.server_name == "test-server"
-        assert classified.tool_name == "read_database"
-        assert classified.description == "Query the database for records."
-        assert classified.confidence > 0
-
-    def test_multiple_capabilities(self):
-        """A tool can match multiple capability categories."""
-        tool = DiscoveredTool(
-            server_name="multi",
-            tool_name="fetch_and_send",
-            description="Fetch data from a URL and send it via email webhook.",
-            input_schema={},
-        )
-        classifier = RuleBasedFallbackClassifier()
-        classified = classifier.classify(tool)
-
-        assert len(classified.capabilities) >= 2
+    def test_classification_has_confidence_score(self):
+        tool = make_tool("read_file", "Read file contents")
+        result = self._classify_sync(tool)
+        assert 0.0 <= result.classification.confidence <= 1.0
