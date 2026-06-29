@@ -17,3 +17,13 @@ class TestAPISmoke:
         from mcp_audit.api.main import create_app
         app = create_app()
         
+        paths = []
+        for route in app.routes:
+            if hasattr(route, "path"):
+                paths.append(route.path)
+                
+        paths_str = " ".join(paths)
+        
+        assert "/api/scans" in paths_str, f"Scans route missing. Found: {paths_str}"
+        assert "/api/drift" in paths_str, f"Drift route missing. Found: {paths_str}"
+        assert "/api/findings" in paths_str, f"Findings route missing. Found: {paths_str}"
