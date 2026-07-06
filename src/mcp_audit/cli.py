@@ -157,3 +157,123 @@ async def _run_scan(
             if verbose:
                 console.print(f"[dim]LLM classifier failed ({e}), using rule-based fallback.[/dim]")
             fallback = RuleBasedFallbackClassifier()
+            classified = [fallback.classify_tool(t) for t in discovered]
+
+        scan.tools_classified = classified
+        progress.update(task, description=f"Classified {len(classified)} tools")
+        progress.remove_task(task)
+
+        # ── Step 4: Build graph & analyze ──────────────────────────────
+        task = progress.add_task("Analyzing capability graph...", total=None)
+        scan.status = ScanStatus.ANALYZING
+
+        builder = CapabilityGraphBuilder()
+        graph = builder.build(classified)
+
+        analyzer = TrifectaAnalyzer(graph)
+        findings = analyzer.find_all()
+
+        scorer = RiskScorer()
+        findings = scorer.score_all(findings, servers)
+        overall_risk = scorer.compute_overall_risk(findings)
+
+        scan.findings = findings
+        scan.overall_risk_score = overall_risk
+        progress.update(task, description=f"Found {len(findings)} findings, overall risk: {overall_risk:.1f}/10")
+        progress.remove_task(task)
+
+        # ── Step 5: Sandbox exploits (optional) ────────────────────────
+        if confirm_exploits and findings:
+            task = progress.add_task("Running sandboxed exploit confirmations...", total=len(findings))
+            scan.status = ScanStatus.EXPLOITING
+
+            from mcp_audit.sandbox.sandbox_manager import SandboxManager
+
+            sandbox = SandboxManager(settings)
+            image_ok = await sandbox.ensure_image()
+
+            if image_ok:
+                results = await sandbox.run_all_exploits(findings)
+                scan.exploit_results = results
+                progress.update(task, advance=len(findings))
+            else:
+                console.print("[yellow]Docker not available — skipping exploit confirmation.[/yellow]")
+            progress.remove_task(task)
+
+    scan.status = ScanStatus.COMPLETED
+
+    # ── Output ─────────────────────────────────────────────────────────
+    if output_fmt == "json":
+        console.print(scan.model_dump_json(indent=2))
+    else:
+        _print_scan_table(scan)
+
+
+def _print_scan_table(scan) -> None:
+    """Print a rich summary of the scan results."""
+    # Summary panel
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]Servers:[/bold] {scan.total_servers}  |  "
+            f"[bold]Tools:[/bold] {scan.total_tools}  |  "
+            f"[bold]Findings:[/bold] {scan.total_findings}  |  "
+            f"[bold]Confirmed Exploits:[/bold] {scan.confirmed_exploits}  |  "
+            f"[bold]Risk:[/bold] [{_risk_color(scan.overall_risk_score)}]{scan.overall_risk_score:.1f}/10.0[/{_risk_color(scan.overall_risk_score)}]",
+            title="📊 Scan Summary",
+            border_style="cyan",
+        )
+    )
+
+    # Findings table
+    if scan.findings:
+        console.print()
+        table = Table(title="⚠️  Findings", show_lines=True)
+        table.add_column("Risk", justify="center", style="bold", width=6)
+        table.add_column("Type", style="cyan")
+        table.add_column("Chain", style="white")
+        table.add_column("Servers", style="dim")
+        table.add_column("Cross-Server", justify="center")
+
+        for f in scan.findings:
+            risk_str = f"[{_risk_color(f.risk_score)}]{f.risk_score:.1f}[/{_risk_color(f.risk_score)}]"
+
+            chain_parts = []
+            if f.injection_tool:
+                chain_parts.append(f"[yellow]{f.injection_tool.tool_name}[/yellow]")
+            if f.data_tool:
+                chain_parts.append(f"[red]{f.data_tool.tool_name}[/red]")
+            if f.exfil_tool:
+                chain_parts.append(f"[blue]{f.exfil_tool.tool_name}[/blue]")
+            if f.code_exec_tool:
+                chain_parts.append(f"[magenta]{f.code_exec_tool.tool_name}[/magenta]")
+            chain = " → ".join(chain_parts)
+
+            servers = ", ".join(f.servers_involved) if f.servers_involved else "—"
+            cross = "[red]YES[/red]" if f.is_cross_server else "[dim]no[/dim]"
+
+            table.add_row(risk_str, f.finding_type.value, chain, servers, cross)
+
+        console.print(table)
+
+    # Exploit results
+    if scan.exploit_results:
+        console.print()
+        table = Table(title="💥 Exploit Confirmation Results", show_lines=True)
+        table.add_column("Verdict", justify="center")
+        table.add_column("Data Exfiltrated", justify="center")
+        table.add_column("Steps", justify="center")
+
+        for er in scan.exploit_results:
+            verdict_style = {
+                "CONFIRMED": "[bold red]🔴 CONFIRMED[/bold red]",
+                "PARTIAL": "[bold yellow]🟡 PARTIAL[/bold yellow]",
+                "FAILED": "[bold green]🟢 NOT EXPLOITABLE[/bold green]",
+                "TIMEOUT": "[bold blue]⏱️ TIMEOUT[/bold blue]",
+                "ERROR": "[bold red]⚠️ ERROR[/bold red]",
+            }
+            verdict_str = verdict_style.get(
+                er.verdict.value if hasattr(er.verdict, "value") else er.verdict,
+                str(er.verdict),
+            )
+            exfil = "[red]YES[/red]" if er.sensitive_data_exfiltrated else "[green]NO[/green]"
