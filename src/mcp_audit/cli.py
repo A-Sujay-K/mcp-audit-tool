@@ -277,3 +277,124 @@ def _print_scan_table(scan) -> None:
                 str(er.verdict),
             )
             exfil = "[red]YES[/red]" if er.sensitive_data_exfiltrated else "[green]NO[/green]"
+            steps_str = str(len(er.steps))
+
+            table.add_row(verdict_str, exfil, steps_str)
+
+        console.print(table)
+
+    console.print()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# DRIFT-CHECK command
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.command(name="drift-check")
+def drift_check(
+    config: str | None = typer.Option(
+        None, "--config", "-c", help="Path to MCP config file."
+    ),
+) -> None:
+    """Compare current tool definitions against a saved baseline."""
+    _print_banner()
+    asyncio.run(_run_drift_check(config))
+
+
+async def _run_drift_check(config_path: str | None) -> None:
+    """Execute drift detection."""
+    from mcp_audit.drift.drift_detector import DriftDetector
+    from mcp_audit.drift.hasher import ToolHasher
+    from mcp_audit.parser.capability_classifier import RuleBasedFallbackClassifier
+    from mcp_audit.parser.config_parser import ConfigParser
+    from mcp_audit.parser.tool_discovery import MockToolDiscoverer
+
+    settings = get_settings()
+    cache_dir = settings.classification_cache_dir
+    baseline_path = cache_dir / "baselines" / "latest.json"
+
+    parser = ConfigParser()
+    if config_path:
+        configs = [parser.parse_file(config_path)]
+    else:
+        configs = parser.auto_detect()
+
+    servers = []
+    for cc in configs:
+        servers.extend(cc.servers)
+
+    if not servers:
+        console.print("[yellow]No servers found.[/yellow]")
+        return
+
+    # Discover and classify current tools
+    mock = MockToolDiscoverer()
+    discovered = await mock.discover_all(servers)
+    fallback = RuleBasedFallbackClassifier()
+    current_tools = [fallback.classify_tool(t) for t in discovered]
+
+    hasher = ToolHasher()
+
+    if baseline_path.exists():
+        # Load previous baseline
+        with open(baseline_path) as f:
+            baseline_data = json.load(f)
+
+        # Reconstruct previous tools from baseline
+        from mcp_audit.parser.schemas import ClassifiedTool
+        previous_tools = [ClassifiedTool(**t) for t in baseline_data]
+
+        detector = DriftDetector()
+        events = detector.detect_drift(previous_tools, current_tools)
+
+        if events:
+            console.print(
+                Panel(
+                    f"[bold red]Detected {len(events)} drift event(s)![/bold red]",
+                    border_style="red",
+                )
+            )
+            report = detector.format_drift_report(events)
+            console.print(report)
+        else:
+            console.print("[bold green]✅ No drift detected. All tools match baseline.[/bold green]")
+    else:
+        console.print("[yellow]No baseline found. Saving current state as baseline...[/yellow]")
+
+    # Save current as new baseline
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(baseline_path, "w") as f:
+        json.dump([t.model_dump(mode="json") for t in current_tools], f, indent=2, default=str)
+    console.print(f"[dim]Baseline saved to {baseline_path}[/dim]")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SERVE command
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="API server host."),
+    port: int = typer.Option(8000, "--port", help="API server port."),
+) -> None:
+    """Start the FastAPI API server and dashboard."""
+    _print_banner()
+    console.print(f"[bold green]Starting MCP Audit API on http://{host}:{port}[/bold green]")
+    console.print("[dim]Dashboard: http://localhost:5173 (run 'npm run dev' in dashboard/)[/dim]")
+    console.print()
+
+    import uvicorn
+
+    uvicorn.run(
+        "mcp_audit.api.main:create_app",
+        host=host,
+        port=port,
+        factory=True,
+        reload=True,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# EXPORT command
