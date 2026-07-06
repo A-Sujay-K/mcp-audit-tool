@@ -263,3 +263,113 @@ def _print_scan_table(scan) -> None:
         table.add_column("Verdict", justify="center")
         table.add_column("Data Exfiltrated", justify="center")
         table.add_column("Steps", justify="center")
+
+        for er in scan.exploit_results:
+            verdict_style = {
+                "CONFIRMED": "[bold red]🔴 CONFIRMED[/bold red]",
+                "PARTIAL": "[bold yellow]🟡 PARTIAL[/bold yellow]",
+                "FAILED": "[bold green]🟢 NOT EXPLOITABLE[/bold green]",
+                "TIMEOUT": "[bold blue]⏱️ TIMEOUT[/bold blue]",
+                "ERROR": "[bold red]⚠️ ERROR[/bold red]",
+            }
+            verdict_str = verdict_style.get(
+                er.verdict.value if hasattr(er.verdict, "value") else er.verdict,
+                str(er.verdict),
+            )
+            exfil = "[red]YES[/red]" if er.sensitive_data_exfiltrated else "[green]NO[/green]"
+            steps_str = str(len(er.steps))
+
+            table.add_row(verdict_str, exfil, steps_str)
+
+        console.print(table)
+
+    console.print()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# DRIFT-CHECK command
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.command(name="drift-check")
+def drift_check(
+    config: str | None = typer.Option(
+        None, "--config", "-c", help="Path to MCP config file."
+    ),
+) -> None:
+    """Compare current tool definitions against a saved baseline."""
+    _print_banner()
+    asyncio.run(_run_drift_check(config))
+
+
+async def _run_drift_check(config_path: str | None) -> None:
+    """Execute drift detection."""
+    from mcp_audit.drift.drift_detector import DriftDetector
+    from mcp_audit.drift.hasher import ToolHasher
+    from mcp_audit.parser.capability_classifier import RuleBasedFallbackClassifier
+    from mcp_audit.parser.config_parser import ConfigParser
+    from mcp_audit.parser.tool_discovery import MockToolDiscoverer
+
+    settings = get_settings()
+    cache_dir = settings.classification_cache_dir
+    baseline_path = cache_dir / "baselines" / "latest.json"
+
+    parser = ConfigParser()
+    if config_path:
+        configs = [parser.parse_file(config_path)]
+    else:
+        configs = parser.auto_detect()
+
+    servers = []
+    for cc in configs:
+        servers.extend(cc.servers)
+
+    if not servers:
+        console.print("[yellow]No servers found.[/yellow]")
+        return
+
+    # Discover and classify current tools
+    mock = MockToolDiscoverer()
+    discovered = await mock.discover_all(servers)
+    fallback = RuleBasedFallbackClassifier()
+    current_tools = [fallback.classify_tool(t) for t in discovered]
+
+    hasher = ToolHasher()
+
+    if baseline_path.exists():
+        # Load previous baseline
+        with open(baseline_path) as f:
+            baseline_data = json.load(f)
+
+        # Reconstruct previous tools from baseline
+        from mcp_audit.parser.schemas import ClassifiedTool
+        previous_tools = [ClassifiedTool(**t) for t in baseline_data]
+
+        detector = DriftDetector()
+        events = detector.detect_drift(previous_tools, current_tools)
+
+        if events:
+            console.print(
+                Panel(
+                    f"[bold red]Detected {len(events)} drift event(s)![/bold red]",
+                    border_style="red",
+                )
+            )
+            report = detector.format_drift_report(events)
+            console.print(report)
+        else:
+            console.print("[bold green]✅ No drift detected. All tools match baseline.[/bold green]")
+    else:
+        console.print("[yellow]No baseline found. Saving current state as baseline...[/yellow]")
+
+    # Save current as new baseline
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(baseline_path, "w") as f:
+        json.dump([t.model_dump(mode="json") for t in current_tools], f, indent=2, default=str)
+    console.print(f"[dim]Baseline saved to {baseline_path}[/dim]")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SERVE command
+# ═══════════════════════════════════════════════════════════════════════
+
