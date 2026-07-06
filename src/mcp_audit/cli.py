@@ -398,3 +398,85 @@ def serve(
 
 # ═══════════════════════════════════════════════════════════════════════
 # EXPORT command
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.command()
+def export(
+    scan_id: str | None = typer.Option(None, "--scan-id", help="Scan ID to export."),
+    format: str = typer.Option("json", "--format", "-f", help="Export format: json, csv, or sarif."),
+    output: str = typer.Option("mcp-audit-findings.json", "--output", "-o", help="Output file path."),
+) -> None:
+    """Export scan findings to a file."""
+    _print_banner()
+    console.print(f"[bold]Exporting findings to {output} in {format} format...[/bold]")
+
+    # For now, output a SARIF skeleton if requested
+    if format == "sarif":
+        sarif = {
+            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "mcp-audit",
+                            "version": __version__,
+                            "informationUri": "https://github.com/your-org/mcp-audit",
+                        }
+                    },
+                    "results": [],
+                }
+            ],
+        }
+        Path(output).write_text(json.dumps(sarif, indent=2))
+    else:
+        Path(output).write_text(json.dumps({"message": "Run a scan first, then export."}, indent=2))
+
+    console.print(f"[green]✅ Exported to {output}[/green]")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# INFO command
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.command()
+def info() -> None:
+    """Show version, configuration, detected MCP configs, and Docker status."""
+    _print_banner()
+    settings = get_settings()
+
+    # Version
+    console.print(f"[bold cyan]Version:[/bold cyan]         {__version__}")
+    console.print(f"[bold cyan]LLM Provider:[/bold cyan]    {settings.llm_provider.value}")
+    console.print(f"[bold cyan]LLM Model:[/bold cyan]       {settings.llm_model}")
+    console.print(f"[bold cyan]Database:[/bold cyan]         {settings.db_backend.value}")
+    console.print(f"[bold cyan]Sandbox Enabled:[/bold cyan]  {settings.sandbox_enabled}")
+
+    # Docker status
+    try:
+        import docker
+
+        client = docker.from_env()
+        info = client.info()
+        console.print(f"[bold green]Docker:[/bold green]           ✅ Running ({info.get('ServerVersion', '?')})")
+    except Exception:
+        console.print("[bold red]Docker:[/bold red]           ❌ Not available")
+
+    # Detected configs
+    console.print()
+    console.print("[bold]Detected MCP Configurations:[/bold]")
+    from mcp_audit.parser.config_parser import ConfigParser
+
+    parser = ConfigParser()
+    configs = parser.auto_detect()
+    if configs:
+        for cc in configs:
+            console.print(f"  [cyan]{cc.client_type}[/cyan]: {cc.config_path} ({len(cc.servers)} servers)")
+    else:
+        console.print("  [dim]No MCP configurations found.[/dim]")
+
+
+if __name__ == "__main__":
+    app()
