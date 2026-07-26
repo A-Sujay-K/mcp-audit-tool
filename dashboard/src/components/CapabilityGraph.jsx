@@ -145,3 +145,139 @@ export default function CapabilityGraph({ graphData, width = 800, height = 500 }
         ctx.fill();
         ctx.globalAlpha = 1;
       }
+
+      // Nodes
+      const hovered = hoveredRef.current;
+      for (const node of nodes) {
+        const isHovered = node === hovered;
+
+        // Glow
+        if (isHovered) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.radius + 8, 0, Math.PI * 2);
+          ctx.fillStyle = node.color + '22';
+          ctx.fill();
+        }
+
+        // Node circle
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+        ctx.fillStyle = node.color + (isHovered ? 'ff' : 'cc');
+        ctx.fill();
+        ctx.strokeStyle = node.color;
+        ctx.lineWidth = isHovered ? 2.5 : 1;
+        ctx.stroke();
+
+        // Label
+        ctx.font = `${isHovered ? '600' : '400'} 10px Inter, sans-serif`;
+        ctx.fillStyle = isHovered ? '#e8eaf6' : '#9ba3c7';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.tool_name || node.id, node.x, node.y + node.radius + 14);
+
+        // Server label
+        if (isHovered && node.server_name) {
+          ctx.font = '400 9px Inter, sans-serif';
+          ctx.fillStyle = '#5d6494';
+          ctx.fillText(`[${node.server_name}]`, node.x, node.y + node.radius + 26);
+        }
+      }
+
+      animRef.current = requestAnimationFrame(tick);
+    }
+
+    animRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [graphData, width, height]);
+
+  // Mouse interaction
+  const handleMouseMove = useCallback((e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    mouseRef.current = { x: mx, y: my };
+
+    if (dragRef.current) {
+      dragRef.current.x = mx;
+      dragRef.current.y = my;
+      dragRef.current.vx = 0;
+      dragRef.current.vy = 0;
+      return;
+    }
+
+    // Hit test
+    let found = null;
+    for (const node of nodesRef.current) {
+      const dx = mx - node.x;
+      const dy = my - node.y;
+      if (dx * dx + dy * dy < (node.radius + 4) * (node.radius + 4)) {
+        found = node;
+        break;
+      }
+    }
+    hoveredRef.current = found;
+    canvasRef.current.style.cursor = found ? 'pointer' : 'grab';
+  }, []);
+
+  const handleMouseDown = useCallback((e) => {
+    if (hoveredRef.current) {
+      dragRef.current = hoveredRef.current;
+      canvasRef.current.style.cursor = 'grabbing';
+    }
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
+
+  if (!graphData?.nodes?.length) {
+    return (
+      <div className="card empty-state" style={{ height }}>
+        <div className="empty-state__icon">🕸️</div>
+        <div className="empty-state__title">No Graph Data</div>
+        <div className="empty-state__description">
+          Run a scan to generate the capability graph.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="graph-container" style={{ height }}>
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        onMouseMove={handleMouseMove}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{ display: 'block', width: '100%', height: '100%' }}
+      />
+      <div className="graph-legend">
+        {Object.entries(NODE_COLORS).map(([cap, color]) => (
+          <div key={cap} className="graph-legend__item">
+            <span className="graph-legend__dot" style={{ background: color }} />
+            <span>{CAPABILITY_LABELS[cap]?.label || cap}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getPrimaryColor(capabilities) {
+  if (!capabilities?.length) return '#5d6494';
+  // Priority: reads > ingests > sends > executes > modifies > credentials
+  const priority = [
+    'reads_sensitive_data',
+    'ingests_untrusted_content',
+    'sends_data_out',
+    'executes_code',
+    'modifies_filesystem',
+    'manages_credentials',
+  ];
+  for (const cap of priority) {
+    if (capabilities.includes(cap)) return NODE_COLORS[cap];
+  }
+  return '#5d6494';
+}

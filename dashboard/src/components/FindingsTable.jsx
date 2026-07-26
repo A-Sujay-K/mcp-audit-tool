@@ -86,3 +86,76 @@ export default function FindingsTable({ findings = [], onSelectFinding }) {
                       color: riskColor(f.risk_score),
                       fontWeight: 700,
                       fontSize: '1rem',
+                    }}
+                  >
+                    {f.risk_score?.toFixed(1)}
+                  </span>
+                </td>
+                <td>
+                  <span className={`badge badge--${riskLevel(f.risk_score)}`}>
+                    {FINDING_TYPE_LABELS[f.finding_type] || f.finding_type}
+                  </span>
+                </td>
+                <td style={{ maxWidth: 300 }}>
+                  <div className="flex gap-sm flex-wrap" style={{ fontSize: '0.78rem' }}>
+                    {f.injection_tool && (
+                      <ToolChip tool={f.injection_tool} cap="ingests_untrusted_content" />
+                    )}
+                    {f.injection_tool && (f.data_tool || f.exfil_tool) && <span className="text-muted">→</span>}
+                    {f.data_tool && <ToolChip tool={f.data_tool} cap="reads_sensitive_data" />}
+                    {f.data_tool && f.exfil_tool && <span className="text-muted">→</span>}
+                    {f.exfil_tool && <ToolChip tool={f.exfil_tool} cap="sends_data_out" />}
+                    {f.code_exec_tool && <ToolChip tool={f.code_exec_tool} cap="executes_code" />}
+                    {f.credential_tool && <ToolChip tool={f.credential_tool} cap="manages_credentials" />}
+                  </div>
+                </td>
+                <td>
+                  <div className="flex gap-sm flex-wrap">
+                    {(f.servers_involved || []).map((s) => (
+                      <span key={s} className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td>
+                  <ExploitBadge verdict={f.exploit_verdict} />
+                </td>
+                <td>
+                  {f.is_cross_server ? (
+                    <span className="badge badge--confirmed" style={{ fontSize: '0.65rem' }}>CROSS-SERVER</span>
+                  ) : (
+                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>local</span>
+                  )}
+                </td>
+                <td>
+                  <span className="text-muted" style={{ fontSize: '1.1rem' }}>→</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ToolChip({ tool, cap }) {
+  const label = CAPABILITY_LABELS[cap];
+  const name = typeof tool === 'string' ? tool : tool?.tool_name || '?';
+  return (
+    <span className={`cap-tag ${label?.cssClass || ''}`}>
+      {label?.emoji} {name}
+    </span>
+  );
+}
+
+function ExploitBadge({ verdict }) {
+  if (!verdict) return <span className="badge badge--pending">⏳ Pending</span>;
+  const cfg = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.ERROR;
+  return (
+    <span className={`badge ${cfg.cssClass}`}>
+      {cfg.emoji} {cfg.label}
+    </span>
+  );
+}
