@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+// CapabilityGraph — force-directed cross-server data-flow visualization
 import { CAPABILITY_LABELS } from '../utils/constants';
 
 /**
