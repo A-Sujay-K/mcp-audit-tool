@@ -1,4 +1,4 @@
-import asyncio
+"""MCP tool discovery — async with concurrent server support."""
 import logging
 
 import httpx
