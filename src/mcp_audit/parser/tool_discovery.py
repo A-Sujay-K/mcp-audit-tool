@@ -1,4 +1,4 @@
-"""MCP tool discovery — async with concurrent server support."""
+import asyncio
 import logging
 
 import httpx

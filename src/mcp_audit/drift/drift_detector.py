@@ -1,4 +1,4 @@
-"""Drift detection — identifies tool-poisoning between scan baselines."""
+"""Drift / rug-pull detector — compares tool snapshots between scans.
 
 Detects when MCP server operators silently change tool descriptions,
 schemas, or capabilities after initial approval (the "rug-pull" attack).

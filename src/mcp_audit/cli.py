@@ -1,4 +1,4 @@
-"""MCP Audit CLI — scan, drift-check, serve, export, info commands."""
+"""MCP Audit Tool CLI — the main user-facing interface.
 
 Usage:
     mcp-audit scan [--config PATH] [--confirm-exploits] [--output json|table] [--verbose]

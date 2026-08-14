@@ -116,3 +116,43 @@ MCP_AUDIT_SANDBOX_NETWORK_DISABLED=true  # Non-negotiable for safety
 
 The dashboard provides a real-time view of scan results:
 
+- **📊 Overview** — Risk gauge, server/tool/finding counts
+- **🕸️ Capability Graph** — Interactive force-directed visualization of tool relationships
+- **⚠️ Findings** — Sortable table with attack chain visualization
+- **💥 Exploit Timeline** — Step-by-step replay of what the red-team agent tried
+- **🔔 Drift Alerts** — Rug-pull detection with hash diffs
+
+```bash
+cd dashboard
+npm install
+npm run dev    # http://localhost:5173
+```
+
+## Safety Design
+
+- Sandbox containers run with `network_mode: none` — no internet access
+- Read-only root filesystem with tmpfs for `/tmp`
+- Memory capped (default 512MB), hard timeout (default 120s)
+- Mock MCP servers use synthetic data (no real secrets)
+- All exploit logs require human review before findings are confirmed
+- `cap_drop: ALL` + `no-new-privileges` on all containers
+
+## Development
+
+```bash
+# Install in development mode
+pip install -e ".[dev]"
+
+# Run tests
+pytest -v
+
+# Type checking
+mypy src/
+
+# Start API server with auto-reload
+mcp-audit serve
+```
+
+## License
+
+MIT

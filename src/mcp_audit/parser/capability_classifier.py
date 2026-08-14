@@ -1,5 +1,5 @@
-"""LLM and rule-based capability classifier with batch caching."""
 import asyncio
+import json
 import logging
 
 try:

@@ -1,4 +1,4 @@
-"""Risk scoring for trifecta findings — cross-server weighting."""
+from mcp_audit.parser.schemas import ServerConfig, ToolCapability, TrifectaFinding
 
 
 class RiskScorer:

@@ -1,4 +1,4 @@
-// CapabilityGraph — force-directed cross-server data-flow visualization
+import React, { useRef, useEffect, useCallback } from 'react';
 import { CAPABILITY_LABELS } from '../utils/constants';
 
 /**
