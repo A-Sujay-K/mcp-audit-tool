@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from mcp_audit.config import get_settings
 
@@ -54,6 +55,10 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     async def health_check():
         return {"status": "ok", "version": "0.1.0"}
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        return RedirectResponse(url="/docs")
 
     return app
 
