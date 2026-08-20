@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: mcp-audit-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -e ".[dev]"
+    startCommand: uvicorn mcp_audit.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./mcp_audit.db
+      - key: MCP_AUDIT_CORS_ORIGINS
+        value: '["*"]'
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+    healthCheckPath: /api/health

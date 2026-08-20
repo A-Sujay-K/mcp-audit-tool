@@ -56,3 +56,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": "0.1.0"}
 
     return app
+
+
+# Module-level instance for uvicorn / Render
+app = create_app()

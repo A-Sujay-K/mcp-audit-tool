@@ -2,7 +2,10 @@
  * API client constants and utility hooks.
  */
 
-export const API_BASE = '/api';
+// API base — set VITE_API_URL at build time to point to your backend.
+// Falls back to same-origin /api for local development.
+export const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 
 export const CAPABILITY_LABELS = {
   reads_sensitive_data: { label: 'Reads Data', emoji: '🔴', cssClass: 'cap-tag--reads' },

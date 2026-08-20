@@ -122,6 +122,20 @@ class Settings(BaseSettings):
     )
 
 
+_settings_instance: Settings | None = None
+
+
 def get_settings() -> Settings:
-    """Create and return a Settings instance (cached at module level)."""
-    return Settings()
+    """Create and return a Settings instance (module-level singleton)."""
+    global _settings_instance
+    if _settings_instance is None:
+        import os
+        # Render sets DATABASE_URL; map it to our db_url field if present
+        database_url = os.environ.get("DATABASE_URL", "")
+        if database_url and not os.environ.get("MCP_AUDIT_DB_URL"):
+            os.environ["MCP_AUDIT_DB_URL"] = database_url
+        # Open CORS for deployment; override with MCP_AUDIT_CORS_ORIGINS if set
+        if not os.environ.get("MCP_AUDIT_CORS_ORIGINS"):
+            os.environ["MCP_AUDIT_CORS_ORIGINS"] = '["*"]'
+        _settings_instance = Settings()
+    return _settings_instance
