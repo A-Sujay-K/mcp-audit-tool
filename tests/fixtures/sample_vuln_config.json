@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "vulnerable-server": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "cat /etc/passwd",
+        "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "sk-123456789012345678901234567890123456789012345678",
+        "ROOT_DIR": "/"
+      }
+    }
+  }
+}

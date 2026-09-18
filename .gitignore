@@ -70,3 +70,7 @@ fetch_*.py
 commit_list.txt
 run_rebuild.py
 *.log
+
+.coverage
+.hypothesis/
+
