@@ -3,7 +3,7 @@ name = "mcp-sentinel"
 version = "0.1.0"
 description = "Autonomous security auditor for Model Context Protocol (MCP) servers and client configurations"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "Proprietary. All rights reserved." }
 requires-python = ">=3.11"
 authors = [
     { name = "Akarsh Sujay Kumar", email = "akarshsujaykumar.23is@saividya.ac.in" }
@@ -12,7 +12,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

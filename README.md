@@ -1,7 +1,7 @@
 # MCP-Sentinel
 
 [![CI](https://github.com/A-Sujay-K/mcp-audit-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/A-Sujay-K/mcp-audit-tool/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License: All Rights Reserved](https://img.shields.io/badge/License-All_Rights_Reserved-red.svg)](LICENSE)
 [![Copyright: © 2026](https://img.shields.io/badge/Copyright-%C2%A9_2026_Akarsh_Sujay_Kumar-lightgrey.svg)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
@@ -126,6 +126,12 @@ See [docs/threat_model.md](docs/threat_model.md) for the STRIDE threat model cov
 
 ## License & Copyright
 
-Copyright © 2026 Akarsh Sujay Kumar. All rights reserved.
+**Copyright © 2026 Akarsh Sujay Kumar. All rights reserved.**
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full legal terms.
+This software is source-available for personal evaluation and non-commercial security auditing.
+
+### Key Terms & Restrictions
+- **No Plagiarism / Rebranding**: You may not claim this software or any derivative works as your own.
+- **Permission Required**: Any copying, redistribution, commercial integration, or deployment as a managed cloud service requires **prior written authorization** from the copyright holder.
+
+For commercial and enterprise licensing inquiries, contact: `akarshsujaykumar.23is@saividya.ac.in`. See [LICENSE](LICENSE) for complete terms.
