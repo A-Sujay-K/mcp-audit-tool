@@ -71,13 +71,13 @@ class McpTargetClient:
             try:
                 proc.kill()
             except ProcessLookupError:
-                pass
+                logger.debug("Process %s already terminated on timeout", self.target.name)
             raise TransportError(f"Stdio communication timed out for '{self.target.name}'") from e
         except Exception as e:
             try:
                 proc.kill()
             except ProcessLookupError:
-                pass
+                logger.debug("Process %s already terminated on error", self.target.name)
             raise TransportError(f"Error communicating with '{self.target.name}': {e}") from e
 
         return self._parse_jsonrpc_tools(stdout_data.decode("utf-8", errors="replace"))

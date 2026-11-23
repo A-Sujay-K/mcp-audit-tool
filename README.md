@@ -1,158 +1,128 @@
-# 🛡️ MCP Audit Tool
+# MCP-Sentinel
 
-> Cross-server MCP security auditor with sandboxed exploit confirmation
+[![CI](https://github.com/A-Sujay-K/mcp-audit-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/A-Sujay-K/mcp-audit-tool/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python: 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Checked with mypy](https://img.shields.io/badge/mypy-strict-blue)](https://mypy-lang.org/)
 
-**MCP Audit** scans your entire Model Context Protocol toolset — across Claude Desktop, Cursor, Windsurf, and any MCP-compatible client — maps what those tools can do *in combination*, and then uses a red-team agent to actually *attempt* the exploit chain in an isolated Docker sandbox.
+Autonomous, production-grade security auditor for **Model Context Protocol (MCP)** server configurations and client manifests.
 
 ---
 
-## The Problem
+## What It Does & What It Does NOT Do
 
-MCP gives AI agents powerful tools: file access, web browsing, email sending, code execution, and more. Each tool seems safe in isolation, but **combine them** and you get attack chains:
+### What MCP-Sentinel Does:
+- **Client Configuration Auditing**: Auto-discovers and parses configurations across Claude Desktop, Cursor, VS Code, Windsurf, and repository `mcp.json` files.
+- **Static Manifest Analysis**: Identifies hardcoded secrets (Shannon entropy + regex patterns), dangerous interactive shell wrappers (`sh -c`, `powershell`, pipe chains), broad filesystem roots, unpinned package installations, and typosquatting attempts.
+- **Prompt Injection & Cloaking Detection**: Detects hidden zero-width Unicode characters, bidirectional override formatting (RLO), instruction smuggling aimed at model override, and cross-server tool shadowing.
+- **Dynamic Protocol Auditing**: Evaluates live MCP endpoints for plaintext HTTP, DNS rebinding vulnerability (missing Host validation), OAuth 2.1 compliance, cryptographic manifest drift ("rug pulls"), and benign canary reflection.
+- **Supply Chain Security**: Queries the real OSV.dev REST API for active CVEs/GHSAs in declared dependencies and generates CycloneDX v1.6 SBOM documents.
+- **Multi-Format Standards Reporting**: Emits validated OASIS SARIF 2.1.0 (for GitHub Code Scanning), Markdown, and self-contained zero-CDN HTML.
+- **Autonomous Monitoring**: Runs as a daemon (`mcp-sentinel watch`) with automated GitHub Issue synchronization and auto-closure on remediation.
 
-```
-fetch_url (attacker-controlled) → read_file (secrets) → send_message (exfiltrate via Slack)
-```
+### What MCP-Sentinel Does NOT Do:
+- **No Aggressive Exploitation**: Does not execute destructive exploit payloads. Active probing uses benign sentinel strings (`mcp-canary-<uuid>`) and strictly requires the `--i-have-authorization` flag.
+- **No Mock or Fabricated Findings**: Every finding is backed by real static parser or live protocol analysis.
+- **No Automatic Code Modification**: Audits and reports vulnerabilities; does not silently rewrite user configuration files without consent.
 
-This is the **"lethal trifecta"**: ingest untrusted content + read sensitive data + send data out. Research shows ~38% of live MCP servers have no auth at all, and tool descriptions can be crafted to steer agent behavior.
+---
 
-## What MCP Audit Does
+## Installation
 
-| Phase | What happens |
-|-------|-------------|
-| **1. Parse** | Auto-detects MCP configs (Claude Desktop, Cursor, Windsurf, etc.) and discovers all tools via `tools/list` |
-| **2. Classify** | LLM + rule-based fallback assigns security capabilities (reads_data, sends_out, executes_code, etc.) |
-| **3. Graph** | Builds a cross-server capability graph, finds lethal trifectas, code execution chains, credential theft paths |
-| **4. Score** | Risk-scores each finding (0–10) based on trifecta completeness, auth gaps, cross-server span |
-| **5. Exploit** | Spins up a Docker sandbox with mock MCP servers and has a red-team agent *actually try* the attack |
-| **6. Drift** | SHA-256 hashes every tool definition to catch silent rug-pull changes between scans |
-
-## Quick Start
-
+### Using `uv` (Recommended)
 ```bash
-# Install
-pip install -e .
-
-# Auto-detect your MCP configs and scan
-mcp-audit scan
-
-# Scan with exploit confirmation (requires Docker)
-mcp-audit scan --confirm-exploits
-
-# Check for tool definition drift
-mcp-audit drift-check
-
-# Start the API server + dashboard
-mcp-audit serve
-
-# Show detected configs and system info
-mcp-audit info
+uv tool install mcp-sentinel
 ```
 
-## Project Structure
-
-```
-mcp-audit/
-├── src/mcp_audit/
-│   ├── parser/            # Config parsing, tool discovery, LLM classification
-│   │   ├── config_parser.py       # Auto-detect Claude, Cursor, Windsurf configs
-│   │   ├── tool_discovery.py      # JSON-RPC tools/list via stdio/HTTP
-│   │   ├── capability_classifier.py # LLM + rule-based capability tagging
-│   │   └── schemas.py             # Pydantic models (single source of truth)
-│   ├── graph/             # Cross-server capability analysis
-│   │   ├── capability_graph.py    # NetworkX directed graph builder
-│   │   ├── trifecta_analyzer.py   # Lethal trifecta + attack chain detection
-│   │   └── risk_scorer.py         # 0–10 risk scoring algorithm
-│   ├── sandbox/           # Docker-isolated exploit confirmation
-│   │   ├── mock_mcp_server.py     # Generates fake MCP servers with synthetic data
-│   │   ├── sandbox_manager.py     # Docker lifecycle (network=none, read-only)
-│   │   ├── exploit_agent.py       # CrewAI red-team agent builder
-│   │   ├── exploit_tasks.py       # Recon → injection → exfiltration tasks
-│   │   └── exploit_logger.py      # Structured exploit attempt logging
-│   ├── drift/             # Rug-pull / tool poisoning detection
-│   │   ├── hasher.py              # SHA-256 tool definition hashing
-│   │   └── drift_detector.py      # Baseline comparison + severity classification
-│   ├── api/               # FastAPI REST API
-│   │   ├── main.py                # App factory with CORS, lifecycle
-│   │   └── routes/                # Scans, findings, drift, graph endpoints
-│   ├── db/                # SQLAlchemy 2.0 async ORM
-│   │   ├── models.py              # Scan, Server, Tool, Finding, Exploit records
-│   │   └── repository.py          # Async CRUD data access layer
-│   ├── cli.py             # Typer CLI with Rich output
-│   └── config.py          # Pydantic Settings (.env configuration)
-├── dashboard/             # React + Vite dashboard
-│   └── src/
-│       ├── App.jsx                # Tabbed layout with demo data
-│       ├── components/            # RiskGauge, CapabilityGraph, FindingsTable, etc.
-│       └── index.css              # Dark mode glassmorphism design system
-├── tests/                 # pytest test suite
-├── Dockerfile.sandbox     # Minimal sandbox container image
-├── docker-compose.yml     # Full stack orchestration
-└── pyproject.toml         # Python project metadata + dependencies
-```
-
-## Configuration
-
-Set environment variables (prefix: `MCP_AUDIT_`) or create a `.env` file:
-
-```env
-# LLM for capability classification
-MCP_AUDIT_LLM_PROVIDER=openai          # openai, anthropic, google, ollama
-MCP_AUDIT_LLM_MODEL=gpt-4o
-MCP_AUDIT_LLM_API_KEY=sk-...
-
-# Database
-MCP_AUDIT_DB_BACKEND=sqlite            # sqlite or postgresql
-MCP_AUDIT_DB_URL=sqlite+aiosqlite:///./mcp_audit.db
-
-# Sandbox (requires Docker)
-MCP_AUDIT_SANDBOX_ENABLED=true
-MCP_AUDIT_SANDBOX_TIMEOUT_SECONDS=120
-MCP_AUDIT_SANDBOX_MEMORY_LIMIT=512m
-MCP_AUDIT_SANDBOX_NETWORK_DISABLED=true  # Non-negotiable for safety
-```
-
-## Dashboard
-
-The dashboard provides a real-time view of scan results:
-
-- **📊 Overview** — Risk gauge, server/tool/finding counts
-- **🕸️ Capability Graph** — Interactive force-directed visualization of tool relationships
-- **⚠️ Findings** — Sortable table with attack chain visualization
-- **💥 Exploit Timeline** — Step-by-step replay of what the red-team agent tried
-- **🔔 Drift Alerts** — Rug-pull detection with hash diffs
-
+### Using `pip`
 ```bash
-cd dashboard
-npm install
-npm run dev    # http://localhost:5173
+pip install mcp-sentinel
 ```
 
-## Safety Design
-
-- Sandbox containers run with `network_mode: none` — no internet access
-- Read-only root filesystem with tmpfs for `/tmp`
-- Memory capped (default 512MB), hard timeout (default 120s)
-- Mock MCP servers use synthetic data (no real secrets)
-- All exploit logs require human review before findings are confirmed
-- `cap_drop: ALL` + `no-new-privileges` on all containers
-
-## Development
-
+### From Source
 ```bash
-# Install in development mode
-pip install -e ".[dev]"
-
-# Run tests
-pytest -v
-
-# Type checking
-mypy src/
-
-# Start API server with auto-reload
-mcp-audit serve
+git clone https://github.com/A-Sujay-K/mcp-audit-tool.git
+cd mcp-audit-tool
+uv venv --python 3.11
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
 ```
+
+---
+
+## CLI Usage
+
+### 1. Static Configuration Scan
+Scan all auto-discovered client configurations on the current machine:
+```bash
+mcp-sentinel scan
+```
+
+Scan an explicit configuration file or workspace directory:
+```bash
+mcp-sentinel scan ./mcp.json
+```
+
+Generate an OASIS SARIF report for GitHub Code Scanning:
+```bash
+mcp-sentinel scan ./mcp.json --format sarif --output audit-results.sarif
+```
+
+Generate a self-contained HTML report:
+```bash
+mcp-sentinel scan ./mcp.json --format html --output audit-report.html
+```
+
+Enforce CI quality gate (exit code 1 if findings meet or exceed severity):
+```bash
+mcp-sentinel scan ./mcp.json --fail-on HIGH
+```
+
+### 2. CycloneDX SBOM Export
+Generate a CycloneDX v1.6 SBOM JSON for all configured servers:
+```bash
+mcp-sentinel sbom --output cyclonedx-sbom.json
+```
+
+### 3. Autonomous Watch Mode
+Continuously monitor configuration files and sync new findings to GitHub Issues:
+```bash
+export GITHUB_TOKEN="ghp_..."
+mcp-sentinel watch --interval 300 --repo "A-Sujay-K/mcp-audit-tool"
+```
+
+---
+
+## Rule Catalog
+
+| Rule ID | Name | Severity | Standards |
+| :--- | :--- | :--- | :--- |
+| **MCP-SEC-001** | Hardcoded Secret in Environment or Arguments | CRITICAL | CWE-798, OWASP LLM06 |
+| **MCP-SEC-002** | Dangerous Shell Wrapper Execution | HIGH | CWE-78, OWASP LLM02 |
+| **MCP-SEC-003** | Broad Filesystem Root Access | HIGH | CWE-22, CWE-552, OWASP LLM02 |
+| **MCP-SEC-004** | Unpinned Package Execution | MEDIUM | CWE-829, OWASP LLM05 |
+| **MCP-SEC-005** | Potential Package Typosquatting | HIGH | CWE-829, OWASP LLM05 |
+| **MCP-SEC-006** | Zero-Width & Invisible Unicode Characters | HIGH | CWE-116, OWASP LLM01 |
+| **MCP-SEC-007** | Bidirectional Text Override | HIGH | CWE-116, OWASP LLM01 |
+| **MCP-SEC-008** | Prompt Injection / Instruction Smuggling | HIGH | CWE-74, OWASP LLM01 |
+| **MCP-SEC-009** | Tool Shadowing & Namespace Hijacking | MEDIUM | CWE-699, OWASP LLM02 |
+| **MCP-SEC-010** | Over-Permissive String Parameter Schema | MEDIUM | CWE-20, OWASP LLM02 |
+| **MCP-SEC-011** | Insecure Transport Protocol | HIGH | CWE-319, OWASP LLM06 |
+| **MCP-SEC-012** | DNS Rebinding / Host Header Permissiveness | HIGH | CWE-942, CWE-346 |
+| **MCP-SEC-013** | Missing Authentication / Insecure Auth Flow | HIGH | CWE-306, OWASP LLM06 |
+| **MCP-SEC-014** | Manifest Drift ("Rug Pull") | CRITICAL | CWE-353, OWASP LLM05 |
+| **MCP-SEC-015** | Canary Input Reflection / Execution Sink | HIGH | CWE-20, CWE-22, CWE-78 |
+| **MCP-SEC-016** | Known Vulnerability in Declared Dependency | HIGH | CWE-1395, OWASP LLM05 |
+
+---
+
+## Security & Threat Model
+
+See [docs/threat_model.md](docs/threat_model.md) for the STRIDE threat model covering the auditor itself. To report vulnerabilities, refer to [SECURITY.md](SECURITY.md).
+
+---
 
 ## License
 
-MIT
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

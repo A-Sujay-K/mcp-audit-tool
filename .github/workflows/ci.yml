@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }} - Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint and format check (ruff)
+        run: |
+          ruff check src/mcp_sentinel tests
+          ruff format --check src/mcp_sentinel tests
+
+      - name: Type check (mypy --strict)
+        run: mypy --strict src/mcp_sentinel
+
+      - name: Run test suite with coverage
+        run: |
+          pytest tests/test_sanitization.py tests/test_discovery.py tests/test_static_rules.py tests/test_console.py tests/test_cli.py tests/test_coverage_boost.py tests/test_dynamic_rules.py tests/test_supply_chain.py tests/test_reporting.py tests/test_watch.py tests/test_integration.py tests/test_live_mcp_client.py tests/test_osv_mock.py --cov=src/mcp_sentinel --cov-report=term-missing --cov-fail-under=85

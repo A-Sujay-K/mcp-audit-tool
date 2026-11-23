@@ -1,49 +1,22 @@
+# Contributing to MCP-Sentinel
 
-
----
+Thank you for your interest in contributing to MCP-Sentinel.
 
 ## Development Workflow
 
-We use `uv` for fast dependency management and `ruff` for linting.
+1. **Environment Setup**:
+   ```bash
+   uv venv --python 3.11
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   uv pip install -e ".[dev]"
+   ```
 
-```bash
-# Clone and set up
-git clone https://github.com/A-Sujay-K/mcp-audit-tool.git
-cd mcp-audit-tool
-make dev-install
+2. **Code Standards**:
+   - Formatting and linting: `ruff check src/mcp_sentinel tests` and `ruff format src/mcp_sentinel tests`
+   - Strict static type checking: `mypy --strict src/mcp_sentinel`
+   - Tests and coverage gate: `pytest --cov=src/mcp_sentinel --cov-report=term-missing` (Minimum coverage: ≥ 85%)
 
-# Install pre-commit hooks (optional but recommended)
-pip install pre-commit
-pre-commit install
-
-# Run tests before pushing
-make test
-make lint
-```
-
-### Branch Naming
-
-| Type        | Pattern               | Example                         |
-|-------------|-----------------------|---------------------------------|
-| Feature     | `feat/<short-desc>`   | `feat/streaming-scan-progress`  |
-| Bug fix     | `fix/<short-desc>`    | `fix/sandbox-timeout-cleanup`   |
-| Docs        | `docs/<short-desc>`   | `docs/architecture-diagram`     |
-| Refactor    | `refactor/<topic>`    | `refactor/classifier-caching`   |
-
-### Commit Style
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-feat(parser): support Zed context_servers config format
-fix(sandbox): cleanup container on SIGTERM in addition to timeout
-docs(faq): add troubleshooting steps for Docker not found error
-```
-
-### Release Process
-
-1. Update `CHANGELOG.md` - move items from `[Unreleased]` to a new version section.
-2. Bump version in `pyproject.toml`.
-3. Open a PR titled `chore: release v0.x.0`.
-4. After merge, tag: `git tag v0.x.0 && git push origin v0.x.0`.
-5. GitHub Actions publishes to PyPI automatically via Trusted Publishing.
+3. **Pull Request Guidelines**:
+   - Create a feature branch from `main`.
+   - Ensure all unit and property tests pass.
+   - Use Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
