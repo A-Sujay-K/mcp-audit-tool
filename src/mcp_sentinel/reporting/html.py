@@ -83,6 +83,7 @@ def generate_html_report(report: ScanReport) -> str:
         .badge {{ color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; }}
         code {{ background: #f1f1f1; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 12px; }}
         .clean {{ color: #22863a; font-weight: bold; font-size: 16px; padding: 16px; background: #dcffe4; border-radius: 6px; }}
+        .footer {{ margin-top: 32px; padding-top: 16px; border-top: 1px solid #e1e4e8; text-align: center; font-size: 13px; color: #586069; }}
     </style>
 </head>
 <body>
@@ -96,6 +97,9 @@ def generate_html_report(report: ScanReport) -> str:
         </div>
         <h2>Findings Detail</h2>
         {findings_table}
+        <div class="footer">
+            <p>&copy; 2026 Akarsh Sujay Kumar. All rights reserved. &bull; Proprietary Software</p>
+        </div>
     </div>
 </body>
 </html>

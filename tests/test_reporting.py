@@ -74,3 +74,5 @@ def test_html_report() -> None:
     html_empty = generate_html_report(report)
     assert "<!DOCTYPE html>" in html_empty
     assert "Zero security findings detected" in html_empty
+    assert "Akarsh Sujay Kumar" in html_empty
+    assert "All rights reserved" in html_empty
