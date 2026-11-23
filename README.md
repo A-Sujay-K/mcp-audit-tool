@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/A-Sujay-K/mcp-audit-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/A-Sujay-K/mcp-audit-tool/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Copyright: © 2026](https://img.shields.io/badge/Copyright-%C2%A9_2026_Akarsh_Sujay_Kumar-lightgrey.svg)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://img.shields.io/badge/mypy-strict-blue)](https://mypy-lang.org/)
@@ -123,6 +124,8 @@ See [docs/threat_model.md](docs/threat_model.md) for the STRIDE threat model cov
 
 ---
 
-## License
+## License & Copyright
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+Copyright © 2026 Akarsh Sujay Kumar. All rights reserved.
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full legal terms.
